@@ -78,6 +78,45 @@ This application is a lightweight web system designed to manage racquet drop-off
 
 The system is intentionally simple, secure, and easy to operate by front desk staff.
 
+## Quick Start (Running StringPro)
+
+### Option A: Run locally (recommended for club IT/admin)
+
+**Prerequisites**
+- Node.js 18+ installed
+- Git installed
+
+**1) Clone the repository**
+```bash
+git clone https://github.com/akhimass/racquet-hub.git
+cd racquet-hub
+```
+
+**2) Install dependencies**
+```bash
+npm install
+```
+
+**3) Create a local environment file**
+Create a file named `.env.local` in the project root with:
+
+```env
+VITE_SUPABASE_URL=https://<YOUR_PROJECT_REF>.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=<YOUR_SUPABASE_ANON_OR_PUBLISHABLE_KEY>
+```
+
+> **Important:** Never commit `.env` / `.env.local` files to GitHub.
+
+**4) Start the app**
+```bash
+npm run dev
+```
+
+Then open the local URL printed in your terminal (usually `http://localhost:5173`).
+
+### Option B: Run from a hosted deployment
+If the club hosts StringPro (Vercel/Netlify/etc.), staff can use the hosted URL. Local setup is not required.
+
 ---
 
 ## What This System Does
@@ -195,6 +234,49 @@ The system is modular and can be extended with:
 - Audit logs
 
 ---
+
+## Database Setup (One-Time)
+
+If the Supabase project is new, the club admin should run the database setup SQL in **Supabase → SQL Editor** to create tables, triggers, and security policies.
+
+At minimum, the setup should include:
+- Tables: `strings`, `racquet_jobs`
+- Trigger: auto-set `pickup_deadline = drop_in_date + 3 days`
+- Validation constraints (optional but recommended): US phone format and email format
+- RLS policies for staff-only Admin access
+
+If you are unsure which SQL script to run, contact the developer/system admin.
+
+## Supabase Backend Access (For Club Admins)
+
+StringPro uses **Supabase** (PostgreSQL + Auth) as the backend.
+
+### How to access Supabase
+1. Go to the Supabase dashboard for the club’s project.
+2. Use the **Table Editor** to view and manage data.
+
+Key tables:
+- `racquet_jobs` — all drop-offs and statuses
+- `strings` — dropdown values for “String Required”
+
+### Managing strings (recommended method)
+Use the StringPro Admin interface to add/edit/deactivate strings. This avoids accidental database mistakes.
+
+### Managing staff access (Admin login)
+- Supabase **Auth** controls who can access Admin-only pages.
+- Add staff users in **Authentication → Users**.
+
+### Running SQL (schema updates, policies)
+If the club needs to apply database updates:
+- Use **SQL Editor** in Supabase
+- Paste and run the provided SQL scripts (schema/trigger/constraints/RLS)
+
+### Security (RLS)
+StringPro is designed so:
+- The Drop-Off form can insert new jobs (front desk intake)
+- Only authenticated staff can view/update jobs and manage strings
+
+If Admin pages show “no data,” confirm the user is logged in and the correct Supabase project is being used.
 
 ## Support & Future Enhancements
 
