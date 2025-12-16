@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { StringOption, RacquetJob, RacquetFormData, RacquetStatus } from '@/types';
+import { normalizeUSPhone } from '@/lib/validation';
 
 // Strings API
 export const fetchStrings = async (): Promise<StringOption[]> => {
@@ -60,11 +61,38 @@ export const fetchRacquets = async (): Promise<RacquetJob[]> => {
 
 export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJob> => {
   // Map form data to database schema
+  // Ensure normalized phone and trimmed/lowercased email
+  const phone = normalizeUSPhone(formData.customerPhone) || formData.customerPhone;
+  const email = formData.customerEmail ? formData.customerEmail.trim().toLowerCase() : null;
+
+  // Ensure pickup deadline is present (compute from dropInDate if missing)
+  const computeLocalDate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const dropIn = formData.dropInDate
+    ? formData.dropInDate
+    : computeLocalDate(new Date());
+
+  let pickupDeadline = formData.pickupDeadline || null;
+  if (!pickupDeadline && dropIn) {
+    const [yStr, mStr, dStr] = dropIn.split('-');
+    const dt = new Date(Number(yStr), Number(mStr) - 1, Number(dStr));
+    dt.setDate(dt.getDate() + 3);
+    pickupDeadline = computeLocalDate(dt);
+  }
+
   const insertData = {
     member_name: formData.customerName,
-    phone: formData.customerPhone,
-    email: formData.customerEmail,
-    drop_in_date: new Date().toISOString().split('T')[0],
+    phone,
+    email,
+    // Use provided dropInDate (ISO yyyy-mm-dd) if present, otherwise default to today's local date
+    drop_in_date: dropIn,
+    // Pickup deadline supplied by client (expected ISO yyyy-mm-dd), or computed by server
+    pickup_deadline: pickupDeadline,
     racquet_type: `${formData.racquetBrand} ${formData.racquetModel}`,
     string_id: formData.stringId,
     string_tension: parseFloat(formData.tension) || null,

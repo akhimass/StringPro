@@ -29,7 +29,7 @@ export interface RacquetJob {
   strings?: StringOption | null;
 }
 
-export type RacquetStatus = 'processing' | 'in-progress' | 'complete' | 'cancelled';
+export type RacquetStatus = 'processing' | 'in-progress' | 'complete' | 'cancelled' | 'delivered';
 
 export interface RacquetJobFormData {
   member_name: string;
@@ -66,4 +66,9 @@ export interface RacquetFormData {
   stringId: string;
   tension: string;
   notes: string;
+  // Optional dates (ISO yyyy-mm-dd) supplied by the client
+  dropInDate?: string;
+  pickupDeadline?: string;
+  // Terms checkbox value
+  termsAccepted?: boolean;
 }

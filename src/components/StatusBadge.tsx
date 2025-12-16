@@ -18,6 +18,10 @@ const statusConfig: Record<RacquetStatus, { label: string; className: string }> 
     label: 'Complete',
     className: 'bg-status-complete-bg text-status-complete',
   },
+  delivered: {
+    label: 'Delivered',
+    className: 'bg-green-100 text-green-800',
+  },
   cancelled: {
     label: 'Cancelled',
     className: 'bg-status-cancelled-bg text-status-cancelled',

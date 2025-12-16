@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { normalizeUSPhone, isValidEmail } from '@/lib/validation';
 import { fetchStrings, createRacquet } from '@/lib/api';
 import { RacquetFormData } from '@/types';
 import { Header } from '@/components/Header';
@@ -23,13 +24,18 @@ import { AlertCircle, CheckCircle2 } from 'lucide-react';
 
 const formSchema = z.object({
   customerName: z.string().min(1, 'Name is required').max(100),
-  customerPhone: z.string().min(1, 'Phone is required').max(20),
-  customerEmail: z.string().email('Invalid email').max(255),
+  customerPhone: z
+    .string()
+    .min(1, 'Phone is required')
+    .max(30)
+    .refine((val) => normalizeUSPhone(val) !== null, { message: 'Enter a valid US phone number.' }),
+  customerEmail: z.string().min(1, 'Email is required').max(255).refine(isValidEmail, { message: 'Enter a valid email address.' }),
   racquetBrand: z.string().min(1, 'Racquet brand is required').max(100),
-  racquetModel: z.string().min(1, 'Racquet model is required').max(100),
   stringId: z.string().min(1, 'String selection is required'),
   tension: z.string().min(1, 'Tension is required').max(10),
   notes: z.string().max(500).optional(),
+  dropInDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
+  termsAccepted: z.boolean().refine((v) => v === true, { message: 'You must accept the terms & conditions.' }),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -48,6 +54,7 @@ export default function DropOff() {
   const {
     register,
     handleSubmit,
+    setFocus,
     setValue,
     watch,
     reset,
@@ -63,15 +70,30 @@ export default function DropOff() {
       stringId: '',
       tension: '',
       notes: '',
+      // Default dropInDate to today local
+      dropInDate: (() => {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      })(),
+      termsAccepted: false,
     },
   });
 
   const mutation = useMutation({
     mutationFn: (data: RacquetFormData) => createRacquet(data),
-    onSuccess: () => {
+    onSuccess: (res) => {
+      // Log returned record for easy verification during development
+      // (temporary, remove after confirming values in DB or network)
+      // eslint-disable-next-line no-console
+      console.log('createRacquet succeeded:', res);
       queryClient.invalidateQueries({ queryKey: ['racquets'] });
       setSubmitted(true);
-      toast.success('Racquet submitted successfully!');
+      // Show pickup date in success message when available
+      const pickup = (res as any)?.pickup_deadline || (res as any)?.pickupDeadline || null;
+      toast.success(pickup ? `Racquet submitted! Pickup by ${pickup}` : 'Racquet submitted successfully!');
     },
     onError: () => {
       toast.error('Failed to submit racquet');
@@ -79,7 +101,52 @@ export default function DropOff() {
   });
 
   const onSubmit = (data: FormValues) => {
-    mutation.mutate(data as RacquetFormData);
+    // Compute drop-in date (ISO yyyy-mm-dd) - default to today if not provided
+    const toLocalDateString = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
+    // Ensure dropInDate is present (form defaults to today). Use provided value.
+    const dropInDate = (data as any).dropInDate || toLocalDateString(new Date());
+
+    // Parse the dropInDate as local date (construct using components to avoid UTC offset) and add 3 days
+    const [yStr, mStr, dStr] = dropInDate.split('-');
+    const dropDateObj = new Date(Number(yStr), Number(mStr) - 1, Number(dStr));
+    dropDateObj.setDate(dropDateObj.getDate() + 3);
+    const pickupDeadline = toLocalDateString(dropDateObj);
+
+    // Normalize phone to E.164 and email to trimmed lowercase before sending
+    const normalizedPhone = normalizeUSPhone(data.customerPhone) as string;
+    const normalizedEmail = data.customerEmail.trim().toLowerCase();
+
+    const payload = {
+      ...(data as RacquetFormData),
+      customerPhone: normalizedPhone,
+      customerEmail: normalizedEmail,
+      dropInDate,
+      pickupDeadline,
+      termsAccepted: data.termsAccepted,
+    } as RacquetFormData;
+
+    // Temporary log to confirm payload (inspect in browser DevTools network/console)
+    // eslint-disable-next-line no-console
+    console.log('DropOff submit payload:', payload);
+
+    mutation.mutate(payload);
+  };
+
+  const onInvalid = (errs: any) => {
+    const first = Object.keys(errs)[0];
+    if (first) {
+      try {
+        setFocus(first as any);
+      } catch (_) {}
+      const el = document.getElementById(first);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   };
 
   const handleNewSubmission = () => {
@@ -184,6 +251,14 @@ export default function DropOff() {
                     <p className="text-sm text-destructive">{errors.customerEmail.message}</p>
                   )}
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="dropInDate">Drop-off Date</Label>
+                  <Input id="dropInDate" type="date" {...register('dropInDate')} />
+                  {errors.dropInDate && (
+                    <p className="text-sm text-destructive">{errors.dropInDate.message}</p>
+                  )}
+                </div>
               </div>
 
               <div className="card-elevated p-6 space-y-4">
@@ -266,6 +341,21 @@ export default function DropOff() {
                   {errors.notes && (
                     <p className="text-sm text-destructive">{errors.notes.message}</p>
                   )}
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <input
+                    id="termsAccepted"
+                    type="checkbox"
+                    {...register('termsAccepted')}
+                    className="mt-1"
+                  />
+                  <div>
+                    <Label htmlFor="termsAccepted">I accept the terms &amp; conditions</Label>
+                    {errors.termsAccepted && (
+                      <p className="text-sm text-destructive">{errors.termsAccepted.message}</p>
+                    )}
+                  </div>
                 </div>
               </div>
 

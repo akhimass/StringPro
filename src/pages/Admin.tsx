@@ -5,6 +5,7 @@ import { fetchRacquets, updateRacquetStatus, fetchStrings, createString, updateS
 import { RacquetStatus, StringOption, RacquetJob } from '@/types';
 import { Header } from '@/components/Header';
 import { StatusBadge } from '@/components/StatusBadge';
+import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -39,6 +40,7 @@ const statusOptions: { value: RacquetStatus; label: string }[] = [
   { value: 'processing', label: 'Processing' },
   { value: 'in-progress', label: 'In Progress' },
   { value: 'complete', label: 'Complete' },
+  { value: 'delivered', label: 'Delivered' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
@@ -218,6 +220,9 @@ export default function Admin() {
                       <TableHead>Customer</TableHead>
                       <TableHead>Racquet</TableHead>
                       <TableHead>String</TableHead>
+                      <TableHead>Drop-off</TableHead>
+                      <TableHead>Pickup</TableHead>
+                      <TableHead>Due Status</TableHead>
                       <TableHead>Tension</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
@@ -226,13 +231,13 @@ export default function Admin() {
                   <TableBody>
                     {racquetsLoading ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                           Loading...
                         </TableCell>
                       </TableRow>
                     ) : filteredRacquets.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                           No racquets found
                         </TableCell>
                       </TableRow>
@@ -249,28 +254,71 @@ export default function Admin() {
                             <p className="font-medium">{racquet.racquet_type || 'N/A'}</p>
                           </TableCell>
                           <TableCell className="text-sm">{getStringName(racquet)}</TableCell>
+                          <TableCell>
+                            {racquet.drop_in_date ? format(parseISO(racquet.drop_in_date), 'MMM d, yyyy') : 'N/A'}
+                          </TableCell>
+                          <TableCell>
+                            {racquet.pickup_deadline ? format(parseISO(racquet.pickup_deadline), 'MMM d, yyyy') : 'N/A'}
+                          </TableCell>
+                          <TableCell>
+                            {/* Compute due status against local today */}
+                            {(() => {
+                              const today = (() => {
+                                const d = new Date();
+                                const y = d.getFullYear();
+                                const m = String(d.getMonth() + 1).padStart(2, '0');
+                                const day = String(d.getDate()).padStart(2, '0');
+                                return `${y}-${m}-${day}`;
+                              })();
+
+                              const deadline = racquet.pickup_deadline || '';
+                              if ((racquet.status || '') !== 'delivered' && deadline) {
+                                if (deadline < today) {
+                                  return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-destructive text-white">OVERDUE</span>;
+                                }
+                                if (deadline === today) {
+                                  return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-400 text-black">DUE TODAY</span>;
+                                }
+                              }
+                              return null;
+                            })()}
+                          </TableCell>
                           <TableCell>{racquet.string_tension ? `${racquet.string_tension} lbs` : 'N/A'}</TableCell>
                           <TableCell>
                             <StatusBadge status={racquet.status || 'processing'} />
                           </TableCell>
                           <TableCell className="text-right">
-                            <Select
-                              value={racquet.status || 'processing'}
-                              onValueChange={(value: RacquetStatus) =>
-                                updateStatusMutation.mutate({ id: racquet.id, status: value })
-                              }
-                            >
-                              <SelectTrigger className="w-32">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {statusOptions.map((opt) => (
-                                  <SelectItem key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <div className="flex items-center justify-end gap-2">
+                              <Select
+                                value={racquet.status || 'processing'}
+                                onValueChange={(value: RacquetStatus) =>
+                                  updateStatusMutation.mutate({ id: racquet.id, status: value })
+                                }
+                              >
+                                <SelectTrigger className="w-32">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {statusOptions.map((opt) => (
+                                    <SelectItem key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+
+                              {/* Quick action: mark delivered */}
+                              {racquet.status !== 'delivered' && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Mark delivered"
+                                  onClick={() => updateStatusMutation.mutate({ id: racquet.id, status: 'delivered' })}
+                                >
+                                  <Package className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))
