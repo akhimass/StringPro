@@ -6,8 +6,8 @@ interface StatusBadgeProps {
 }
 
 const statusConfig: Record<RacquetStatus, { label: string; className: string }> = {
-  pending: {
-    label: 'Pending',
+  processing: {
+    label: 'Processing',
     className: 'bg-status-pending-bg text-status-pending',
   },
   'in-progress': {

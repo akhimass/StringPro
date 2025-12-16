@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchRacquets, updateRacquetStatus, fetchStrings, createString, updateString, deleteString } from '@/lib/api';
-import { RacquetStatus, StringOption } from '@/types';
+import { RacquetStatus, StringOption, RacquetJob } from '@/types';
 import { Header } from '@/components/Header';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
@@ -36,7 +36,7 @@ import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Package, Settings } from 'lucide-react';
 
 const statusOptions: { value: RacquetStatus; label: string }[] = [
-  { value: 'pending', label: 'Pending' },
+  { value: 'processing', label: 'Processing' },
   { value: 'in-progress', label: 'In Progress' },
   { value: 'complete', label: 'Complete' },
   { value: 'cancelled', label: 'Cancelled' },
@@ -106,14 +106,21 @@ export default function Admin() {
     onError: () => toast.error('Failed to delete string'),
   });
 
+  // Helper to get string name for a racquet job
+  const getStringName = (job: RacquetJob): string => {
+    if (job.strings) {
+      return `${job.strings.brand || ''} ${job.strings.name} ${job.strings.gauge || ''}`.trim();
+    }
+    return 'Unknown';
+  };
+
   // Filtered racquets
   const filteredRacquets = racquets.filter((r) => {
     const matchesStatus = statusFilter === 'all' || r.status === statusFilter;
     const matchesSearch =
       searchQuery === '' ||
-      r.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.racquetBrand.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.racquetModel.toLowerCase().includes(searchQuery.toLowerCase());
+      r.member_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (r.racquet_type?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
     return matchesStatus && matchesSearch;
   });
 
@@ -123,9 +130,9 @@ export default function Admin() {
       setEditingString(string);
       setStringForm({
         name: string.name,
-        brand: string.brand,
-        gauge: string.gauge,
-        active: string.active,
+        brand: string.brand || '',
+        gauge: string.gauge || '',
+        active: string.active ?? true,
       });
     } else {
       setEditingString(null);
@@ -184,7 +191,7 @@ export default function Admin() {
             <div className="card-elevated">
               <div className="p-4 border-b flex flex-col sm:flex-row gap-4">
                 <Input
-                  placeholder="Search by name, brand, or model..."
+                  placeholder="Search by name or racquet type..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="sm:max-w-xs"
@@ -234,24 +241,21 @@ export default function Admin() {
                         <TableRow key={racquet.id}>
                           <TableCell>
                             <div>
-                              <p className="font-medium">{racquet.customerName}</p>
-                              <p className="text-sm text-muted-foreground">{racquet.customerEmail}</p>
+                              <p className="font-medium">{racquet.member_name}</p>
+                              <p className="text-sm text-muted-foreground">{racquet.email}</p>
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div>
-                              <p className="font-medium">{racquet.racquetBrand}</p>
-                              <p className="text-sm text-muted-foreground">{racquet.racquetModel}</p>
-                            </div>
+                            <p className="font-medium">{racquet.racquet_type || 'N/A'}</p>
                           </TableCell>
-                          <TableCell className="text-sm">{racquet.stringName}</TableCell>
-                          <TableCell>{racquet.tension} lbs</TableCell>
+                          <TableCell className="text-sm">{getStringName(racquet)}</TableCell>
+                          <TableCell>{racquet.string_tension ? `${racquet.string_tension} lbs` : 'N/A'}</TableCell>
                           <TableCell>
-                            <StatusBadge status={racquet.status} />
+                            <StatusBadge status={racquet.status || 'processing'} />
                           </TableCell>
                           <TableCell className="text-right">
                             <Select
-                              value={racquet.status}
+                              value={racquet.status || 'processing'}
                               onValueChange={(value: RacquetStatus) =>
                                 updateStatusMutation.mutate({ id: racquet.id, status: value })
                               }

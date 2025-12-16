@@ -1,102 +1,103 @@
-import { StringOption, Racquet, RacquetFormData, RacquetStatus } from '@/types';
-
-// Mock data store (simulates backend)
-let mockStrings: StringOption[] = [
-  { id: '1', name: 'RPM Blast', brand: 'Babolat', gauge: '1.25mm', active: true },
-  { id: '2', name: 'ALU Power', brand: 'Luxilon', gauge: '1.25mm', active: true },
-  { id: '3', name: 'NXT', brand: 'Wilson', gauge: '1.30mm', active: true },
-  { id: '4', name: 'Gut', brand: 'Babolat', gauge: '1.30mm', active: false },
-];
-
-let mockRacquets: Racquet[] = [
-  {
-    id: '1',
-    customerName: 'John Smith',
-    customerPhone: '555-0123',
-    customerEmail: 'john@email.com',
-    racquetBrand: 'Wilson',
-    racquetModel: 'Pro Staff RF97',
-    stringId: '1',
-    stringName: 'Babolat RPM Blast 1.25mm',
-    tension: '52',
-    notes: 'Rush order',
-    status: 'pending',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    customerName: 'Sarah Johnson',
-    customerPhone: '555-0456',
-    customerEmail: 'sarah@email.com',
-    racquetBrand: 'Babolat',
-    racquetModel: 'Pure Aero',
-    stringId: '2',
-    stringName: 'Luxilon ALU Power 1.25mm',
-    tension: '55',
-    notes: '',
-    status: 'in-progress',
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-];
-
-// Simulate network delay
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+import { supabase } from '@/integrations/supabase/client';
+import { StringOption, RacquetJob, RacquetFormData, RacquetStatus } from '@/types';
 
 // Strings API
 export const fetchStrings = async (): Promise<StringOption[]> => {
-  await delay(300);
-  return [...mockStrings];
+  const { data, error } = await supabase
+    .from('strings')
+    .select('*')
+    .order('brand', { ascending: true });
+  
+  if (error) throw error;
+  return data || [];
 };
 
-export const createString = async (data: Omit<StringOption, 'id'>): Promise<StringOption> => {
-  await delay(300);
-  const newString: StringOption = {
-    ...data,
-    id: Date.now().toString(),
-  };
-  mockStrings.push(newString);
+export const createString = async (data: Omit<StringOption, 'id' | 'created_at'>): Promise<StringOption> => {
+  const { data: newString, error } = await supabase
+    .from('strings')
+    .insert(data)
+    .select()
+    .single();
+  
+  if (error) throw error;
   return newString;
 };
 
 export const updateString = async (id: string, data: Partial<StringOption>): Promise<StringOption> => {
-  await delay(300);
-  const index = mockStrings.findIndex(s => s.id === id);
-  if (index === -1) throw new Error('String not found');
-  mockStrings[index] = { ...mockStrings[index], ...data };
-  return mockStrings[index];
+  const { data: updatedString, error } = await supabase
+    .from('strings')
+    .update(data)
+    .eq('id', id)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return updatedString;
 };
 
 export const deleteString = async (id: string): Promise<void> => {
-  await delay(300);
-  mockStrings = mockStrings.filter(s => s.id !== id);
+  const { error } = await supabase
+    .from('strings')
+    .delete()
+    .eq('id', id);
+  
+  if (error) throw error;
 };
 
-// Racquets API
-export const fetchRacquets = async (): Promise<Racquet[]> => {
-  await delay(300);
-  return [...mockRacquets].sort((a, b) => 
-    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
+// Racquet Jobs API
+export const fetchRacquets = async (): Promise<RacquetJob[]> => {
+  const { data, error } = await supabase
+    .from('racquet_jobs')
+    .select(`
+      *,
+      strings (*)
+    `)
+    .order('created_at', { ascending: false });
+  
+  if (error) throw error;
+  return (data || []) as RacquetJob[];
 };
 
-export const createRacquet = async (data: RacquetFormData): Promise<Racquet> => {
-  await delay(300);
-  const string = mockStrings.find(s => s.id === data.stringId);
-  const newRacquet: Racquet = {
-    ...data,
-    id: Date.now().toString(),
-    stringName: string ? `${string.brand} ${string.name} ${string.gauge}` : 'Unknown',
-    status: 'pending',
-    createdAt: new Date().toISOString(),
+export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJob> => {
+  // Map form data to database schema
+  const insertData = {
+    member_name: formData.customerName,
+    phone: formData.customerPhone,
+    email: formData.customerEmail,
+    drop_in_date: new Date().toISOString().split('T')[0],
+    racquet_type: `${formData.racquetBrand} ${formData.racquetModel}`,
+    string_id: formData.stringId,
+    string_tension: parseFloat(formData.tension) || null,
+    string_power: formData.notes || null,
+    status: 'processing' as RacquetStatus,
+    terms_accepted: true,
+    terms_accepted_at: new Date().toISOString(),
   };
-  mockRacquets.push(newRacquet);
-  return newRacquet;
+
+  const { data, error } = await supabase
+    .from('racquet_jobs')
+    .insert(insertData)
+    .select(`
+      *,
+      strings (*)
+    `)
+    .single();
+  
+  if (error) throw error;
+  return data as RacquetJob;
 };
 
-export const updateRacquetStatus = async (id: string, status: RacquetStatus): Promise<Racquet> => {
-  await delay(300);
-  const index = mockRacquets.findIndex(r => r.id === id);
-  if (index === -1) throw new Error('Racquet not found');
-  mockRacquets[index] = { ...mockRacquets[index], status };
-  return mockRacquets[index];
+export const updateRacquetStatus = async (id: string, status: RacquetStatus): Promise<RacquetJob> => {
+  const { data, error } = await supabase
+    .from('racquet_jobs')
+    .update({ status })
+    .eq('id', id)
+    .select(`
+      *,
+      strings (*)
+    `)
+    .single();
+  
+  if (error) throw error;
+  return data as RacquetJob;
 };
