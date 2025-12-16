@@ -14,7 +14,101 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      racquet_jobs: {
+        Row: {
+          created_at: string | null
+          drop_in_date: string
+          email: string | null
+          id: string
+          member_name: string
+          phone: string
+          pickup_deadline: string | null
+          racquet_type: string | null
+          reminder_2_sent: boolean | null
+          reminder_3_sent: boolean | null
+          status: string | null
+          string_id: string | null
+          string_power: string | null
+          string_tension: number | null
+          terms_accepted: boolean | null
+          terms_accepted_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          drop_in_date: string
+          email?: string | null
+          id?: string
+          member_name: string
+          phone: string
+          pickup_deadline?: string | null
+          racquet_type?: string | null
+          reminder_2_sent?: boolean | null
+          reminder_3_sent?: boolean | null
+          status?: string | null
+          string_id?: string | null
+          string_power?: string | null
+          string_tension?: number | null
+          terms_accepted?: boolean | null
+          terms_accepted_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          drop_in_date?: string
+          email?: string | null
+          id?: string
+          member_name?: string
+          phone?: string
+          pickup_deadline?: string | null
+          racquet_type?: string | null
+          reminder_2_sent?: boolean | null
+          reminder_3_sent?: boolean | null
+          status?: string | null
+          string_id?: string | null
+          string_power?: string | null
+          string_tension?: number | null
+          terms_accepted?: boolean | null
+          terms_accepted_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "racquet_jobs_string_id_fkey"
+            columns: ["string_id"]
+            isOneToOne: false
+            referencedRelation: "strings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      strings: {
+        Row: {
+          active: boolean | null
+          brand: string | null
+          created_at: string | null
+          gauge: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          active?: boolean | null
+          brand?: string | null
+          created_at?: string | null
+          gauge?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          active?: boolean | null
+          brand?: string | null
+          created_at?: string | null
+          gauge?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
