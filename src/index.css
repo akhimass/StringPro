@@ -9,109 +9,58 @@
 
 @layer base {
   :root {
-    --background: 0 0% 98%;
-    --foreground: 150 10% 15%;
+    --background: 0 0% 4%;
+    --foreground: 0 0% 95%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 150 10% 15%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 95%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 150 10% 15%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 95%;
 
-    --primary: 152 60% 38%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 142 72% 45%;
+    --primary-foreground: 0 0% 2%;
 
-    --secondary: 150 15% 94%;
-    --secondary-foreground: 150 10% 25%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 90%;
 
-    --muted: 150 10% 92%;
-    --muted-foreground: 150 8% 45%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 55%;
 
-    --accent: 152 45% 92%;
-    --accent-foreground: 152 60% 30%;
+    --accent: 142 50% 15%;
+    --accent-foreground: 142 72% 55%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 150 10% 88%;
-    --input: 150 10% 88%;
-    --ring: 152 60% 38%;
+    --border: 0 0% 16%;
+    --input: 0 0% 16%;
+    --ring: 142 72% 45%;
 
     --radius: 0.625rem;
 
     /* Status colors */
-    --status-pending: 45 93% 47%;
-    --status-pending-bg: 45 93% 94%;
+    --status-pending: 45 93% 50%;
+    --status-pending-bg: 45 50% 12%;
     --status-progress: 217 91% 60%;
-    --status-progress-bg: 217 91% 95%;
-    --status-complete: 152 60% 38%;
-    --status-complete-bg: 152 60% 94%;
+    --status-progress-bg: 217 50% 15%;
+    --status-complete: 142 72% 45%;
+    --status-complete-bg: 142 50% 12%;
     --status-cancelled: 0 72% 51%;
-    --status-cancelled-bg: 0 72% 95%;
+    --status-cancelled-bg: 0 50% 12%;
 
     /* Custom */
-    --surface: 0 0% 100%;
-    --surface-elevated: 0 0% 100%;
+    --surface: 0 0% 7%;
+    --surface-elevated: 0 0% 10%;
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-
-  .dark {
-    --background: 150 10% 8%;
-    --foreground: 150 5% 95%;
-
-    --card: 150 10% 11%;
-    --card-foreground: 150 5% 95%;
-
-    --popover: 150 10% 11%;
-    --popover-foreground: 150 5% 95%;
-
-    --primary: 152 55% 45%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 150 10% 18%;
-    --secondary-foreground: 150 5% 90%;
-
-    --muted: 150 10% 18%;
-    --muted-foreground: 150 5% 60%;
-
-    --accent: 152 30% 18%;
-    --accent-foreground: 152 55% 65%;
-
-    --destructive: 0 62% 50%;
-    --destructive-foreground: 0 0% 100%;
-
-    --border: 150 10% 20%;
-    --input: 150 10% 20%;
-    --ring: 152 55% 45%;
-
-    --status-pending: 45 93% 55%;
-    --status-pending-bg: 45 30% 15%;
-    --status-progress: 217 91% 65%;
-    --status-progress-bg: 217 30% 18%;
-    --status-complete: 152 55% 45%;
-    --status-complete-bg: 152 30% 15%;
-    --status-cancelled: 0 62% 55%;
-    --status-cancelled-bg: 0 30% 15%;
-
-    --surface: 150 10% 11%;
-    --surface-elevated: 150 10% 14%;
-
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 142 72% 45%;
+    --sidebar-primary-foreground: 0 0% 2%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 0 0% 16%;
+    --sidebar-ring: 142 72% 45%;
   }
 }
 
