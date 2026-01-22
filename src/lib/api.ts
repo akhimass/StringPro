@@ -93,7 +93,9 @@ export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJ
     drop_in_date: dropIn,
     // Pickup deadline supplied by client (expected ISO yyyy-mm-dd), or computed by server
     pickup_deadline: pickupDeadline,
-    racquet_type: `${formData.racquetBrand} ${formData.racquetModel}`,
+    racquet_type: formData.racquetModel && formData.racquetModel.trim()
+      ? `${formData.racquetBrand} ${formData.racquetModel.trim()}`
+      : formData.racquetBrand,
     string_id: formData.stringId,
     string_tension: parseFloat(formData.tension) || null,
     string_power: formData.notes || null,
@@ -128,4 +130,13 @@ export const updateRacquetStatus = async (id: string, status: RacquetStatus): Pr
   
   if (error) throw error;
   return data as RacquetJob;
+};
+
+export const deleteRacquet = async (id: string): Promise<void> => {
+  const { error } = await supabase
+    .from('racquet_jobs')
+    .delete()
+    .eq('id', id);
+  
+  if (error) throw error;
 };

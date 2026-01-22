@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchRacquets, updateRacquetStatus, fetchStrings, createString, updateString, deleteString } from '@/lib/api';
+import { fetchRacquets, updateRacquetStatus, deleteRacquet, fetchStrings, createString, updateString, deleteString } from '@/lib/api';
 import { RacquetStatus, StringOption, RacquetJob } from '@/types';
 import { Header } from '@/components/Header';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -31,6 +31,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
@@ -56,15 +66,21 @@ export default function Admin() {
   const [editingString, setEditingString] = useState<StringOption | null>(null);
   const [stringForm, setStringForm] = useState({ name: '', brand: '', gauge: '', active: true });
 
+  // Delete racquet dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [racquetToDelete, setRacquetToDelete] = useState<RacquetJob | null>(null);
+
   // Queries
-  const { data: racquets = [], isLoading: racquetsLoading } = useQuery({
+  const { data: racquets = [], isLoading: racquetsLoading, error: racquetsError } = useQuery({
     queryKey: ['racquets'],
     queryFn: fetchRacquets,
+    retry: 1,
   });
 
-  const { data: strings = [], isLoading: stringsLoading } = useQuery({
+  const { data: strings = [], isLoading: stringsLoading, error: stringsError } = useQuery({
     queryKey: ['strings'],
     queryFn: fetchStrings,
+    retry: 1,
   });
 
   // Mutations
@@ -108,12 +124,35 @@ export default function Admin() {
     onError: () => toast.error('Failed to delete string'),
   });
 
+  const deleteRacquetMutation = useMutation({
+    mutationFn: (id: string) => deleteRacquet(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['racquets'] });
+      toast.success('Racquet deleted');
+      setDeleteDialogOpen(false);
+      setRacquetToDelete(null);
+    },
+    onError: () => {
+      toast.error('Failed to delete racquet');
+      setDeleteDialogOpen(false);
+    },
+  });
+
   // Helper to get string name for a racquet job
   const getStringName = (job: RacquetJob): string => {
-    if (job.strings) {
-      return `${job.strings.brand || ''} ${job.strings.name} ${job.strings.gauge || ''}`.trim();
+    try {
+      if (job.strings) {
+        const parts = [
+          job.strings.brand || '',
+          job.strings.name || '',
+          job.strings.gauge ? `(${job.strings.gauge})` : ''
+        ].filter(Boolean);
+        return parts.join(' ').trim() || 'Unknown';
+      }
+      return 'Unknown';
+    } catch {
+      return 'Unknown';
     }
-    return 'Unknown';
   };
 
   // Filtered racquets
@@ -165,6 +204,34 @@ export default function Admin() {
   const handleTabChange = (value: string) => {
     setSearchParams({ tab: value });
   };
+
+  // Show error state if queries fail
+  if (racquetsError || stringsError) {
+    return (
+      <div className="page-container">
+        <Header />
+        <main className="content-container">
+          <div className="mb-8">
+            <h1 className="text-2xl font-semibold mb-2">Admin Dashboard</h1>
+            <p className="text-muted-foreground">
+              Manage racquet orders and string inventory.
+            </p>
+          </div>
+          <div className="card-elevated p-6">
+            <div className="text-center py-8">
+              <p className="text-destructive mb-4">
+                {racquetsError ? 'Failed to load racquets. ' : ''}
+                {stringsError ? 'Failed to load strings.' : ''}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Please check your connection and try refreshing the page.
+              </p>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container">
@@ -251,14 +318,30 @@ export default function Admin() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <p className="font-medium">{racquet.racquet_type || 'N/A'}</p>
+                            <p className="font-medium">
+                              {racquet.racquet_type 
+                                ? racquet.racquet_type.replace(/\s+undefined\s*/gi, '').trim() || 'N/A'
+                                : 'N/A'}
+                            </p>
                           </TableCell>
                           <TableCell className="text-sm">{getStringName(racquet)}</TableCell>
                           <TableCell>
-                            {racquet.drop_in_date ? format(parseISO(racquet.drop_in_date), 'MMM d, yyyy') : 'N/A'}
+                            {racquet.drop_in_date ? (() => {
+                              try {
+                                return format(parseISO(racquet.drop_in_date), 'MMM d, yyyy');
+                              } catch {
+                                return racquet.drop_in_date;
+                              }
+                            })() : 'N/A'}
                           </TableCell>
                           <TableCell>
-                            {racquet.pickup_deadline ? format(parseISO(racquet.pickup_deadline), 'MMM d, yyyy') : 'N/A'}
+                            {racquet.pickup_deadline ? (() => {
+                              try {
+                                return format(parseISO(racquet.pickup_deadline), 'MMM d, yyyy');
+                              } catch {
+                                return racquet.pickup_deadline;
+                              }
+                            })() : 'N/A'}
                           </TableCell>
                           <TableCell>
                             {/* Compute due status against local today */}
@@ -273,11 +356,33 @@ export default function Admin() {
 
                               const deadline = racquet.pickup_deadline || '';
                               if ((racquet.status || '') !== 'delivered' && deadline) {
-                                if (deadline < today) {
+                                // Calculate days difference
+                                const [deadlineYear, deadlineMonth, deadlineDay] = deadline.split('-').map(Number);
+                                const deadlineDate = new Date(deadlineYear, deadlineMonth - 1, deadlineDay);
+                                const todayDate = new Date();
+                                todayDate.setHours(0, 0, 0, 0);
+                                deadlineDate.setHours(0, 0, 0, 0);
+                                
+                                const daysDiff = Math.floor((deadlineDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+
+                                if (daysDiff < 0) {
+                                  // OVERDUE
                                   return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-destructive text-white">OVERDUE</span>;
-                                }
-                                if (deadline === today) {
+                                } else if (daysDiff === 0) {
+                                  // DUE TODAY
                                   return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-400 text-black">DUE TODAY</span>;
+                                } else if (daysDiff === 1) {
+                                  // DUE IN 1 DAY (orange/warning)
+                                  return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-500 text-white">DUE IN 1 DAY</span>;
+                                } else if (daysDiff === 2) {
+                                  // DUE IN 2 DAYS (yellow/amber)
+                                  return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500 text-white">DUE IN 2 DAYS</span>;
+                                } else if (daysDiff <= 7) {
+                                  // DUE IN 3-7 DAYS (blue/info)
+                                  return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500 text-white">DUE IN {daysDiff} DAYS</span>;
+                                } else {
+                                  // DUE IN 8+ DAYS (green/success)
+                                  return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-500 text-white">DUE IN {daysDiff} DAYS</span>;
                                 }
                               }
                               return null;
@@ -285,12 +390,16 @@ export default function Admin() {
                           </TableCell>
                           <TableCell>{racquet.string_tension ? `${racquet.string_tension} lbs` : 'N/A'}</TableCell>
                           <TableCell>
-                            <StatusBadge status={racquet.status || 'processing'} />
+                            {racquet.status ? (
+                              <StatusBadge status={racquet.status} />
+                            ) : (
+                              <StatusBadge status="processing" />
+                            )}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
                               <Select
-                                value={racquet.status || 'processing'}
+                                value={(racquet.status || 'processing') as RacquetStatus}
                                 onValueChange={(value: RacquetStatus) =>
                                   updateStatusMutation.mutate({ id: racquet.id, status: value })
                                 }
@@ -318,6 +427,20 @@ export default function Admin() {
                                   <Package className="w-4 h-4" />
                                 </Button>
                               )}
+
+                              {/* Delete racquet */}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Delete racquet"
+                                onClick={() => {
+                                  setRacquetToDelete(racquet);
+                                  setDeleteDialogOpen(true);
+                                }}
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -467,6 +590,38 @@ export default function Admin() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Racquet Confirmation Dialog */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Racquet</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this racquet order? This action cannot be undone.
+                {racquetToDelete && (
+                  <div className="mt-2 p-2 bg-muted rounded text-sm">
+                    <p className="font-medium">{racquetToDelete.member_name}</p>
+                    <p className="text-muted-foreground">{racquetToDelete.racquet_type || 'N/A'}</p>
+                  </div>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setRacquetToDelete(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (racquetToDelete) {
+                    deleteRacquetMutation.mutate(racquetToDelete.id);
+                  }
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteRacquetMutation.isPending}
+              >
+                {deleteRacquetMutation.isPending ? 'Deleting...' : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
     </div>
   );

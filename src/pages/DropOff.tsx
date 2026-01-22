@@ -28,11 +28,17 @@ const formSchema = z.object({
     .string()
     .min(1, 'Phone is required')
     .max(30)
-    .refine((val) => normalizeUSPhone(val) !== null, { message: 'Enter a valid US phone number.' }),
+    .refine((val) => normalizeUSPhone(val) !== null, { message: 'Enter a valid US phone number (e.g., (555) 123-4567 or 555-123-4567).' }),
   customerEmail: z.string().min(1, 'Email is required').max(255).refine(isValidEmail, { message: 'Enter a valid email address.' }),
   racquetBrand: z.string().min(1, 'Racquet brand is required').max(100),
   stringId: z.string().min(1, 'String selection is required'),
-  tension: z.string().min(1, 'Tension is required').max(10),
+  tension: z
+    .string()
+    .min(1, 'Tension is required')
+    .refine((val) => {
+      const num = parseFloat(val);
+      return !isNaN(num) && isFinite(num) && num > 0 && num <= 100;
+    }, { message: 'Tension must be a valid number between 1 and 100 lbs.' }),
   notes: z.string().max(500).optional(),
   dropInDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
   termsAccepted: z.boolean().refine((v) => v === true, { message: 'You must accept the terms & conditions.' }),
@@ -58,9 +64,11 @@ export default function DropOff() {
     setValue,
     watch,
     reset,
+    trigger,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
+    mode: 'onBlur',
     defaultValues: {
       customerName: '',
       customerPhone: '',
@@ -230,7 +238,9 @@ export default function DropOff() {
                     <Label htmlFor="customerPhone">Phone</Label>
                     <Input
                       id="customerPhone"
-                      {...register('customerPhone')}
+                      {...register('customerPhone', {
+                        onBlur: () => trigger('customerPhone'),
+                      })}
                       placeholder="555-0123"
                     />
                     {errors.customerPhone && (
@@ -244,7 +254,9 @@ export default function DropOff() {
                   <Input
                     id="customerEmail"
                     type="email"
-                    {...register('customerEmail')}
+                    {...register('customerEmail', {
+                      onBlur: () => trigger('customerEmail'),
+                    })}
                     placeholder="john@email.com"
                   />
                   {errors.customerEmail && (
@@ -321,7 +333,13 @@ export default function DropOff() {
                     <Label htmlFor="tension">Tension (lbs)</Label>
                     <Input
                       id="tension"
-                      {...register('tension')}
+                      type="number"
+                      step="0.1"
+                      min="1"
+                      max="100"
+                      {...register('tension', {
+                        onBlur: () => trigger('tension'),
+                      })}
                       placeholder="52"
                     />
                     {errors.tension && (
