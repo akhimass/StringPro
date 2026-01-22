@@ -5,6 +5,7 @@ import { fetchRacquets, updateRacquetStatus, deleteRacquet, fetchStrings, create
 import { RacquetStatus, StringOption, RacquetJob } from '@/types';
 import { Header } from '@/components/Header';
 import { StatusBadge } from '@/components/StatusBadge';
+import { DueStatusBadge } from '@/components/DueStatusBadge';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -344,49 +345,10 @@ export default function Admin() {
                             })() : 'N/A'}
                           </TableCell>
                           <TableCell>
-                            {/* Compute due status against local today */}
-                            {(() => {
-                              const today = (() => {
-                                const d = new Date();
-                                const y = d.getFullYear();
-                                const m = String(d.getMonth() + 1).padStart(2, '0');
-                                const day = String(d.getDate()).padStart(2, '0');
-                                return `${y}-${m}-${day}`;
-                              })();
-
-                              const deadline = racquet.pickup_deadline || '';
-                              if ((racquet.status || '') !== 'delivered' && deadline) {
-                                // Calculate days difference
-                                const [deadlineYear, deadlineMonth, deadlineDay] = deadline.split('-').map(Number);
-                                const deadlineDate = new Date(deadlineYear, deadlineMonth - 1, deadlineDay);
-                                const todayDate = new Date();
-                                todayDate.setHours(0, 0, 0, 0);
-                                deadlineDate.setHours(0, 0, 0, 0);
-                                
-                                const daysDiff = Math.floor((deadlineDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
-
-                                if (daysDiff < 0) {
-                                  // OVERDUE
-                                  return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-destructive text-white">OVERDUE</span>;
-                                } else if (daysDiff === 0) {
-                                  // DUE TODAY
-                                  return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-400 text-black">DUE TODAY</span>;
-                                } else if (daysDiff === 1) {
-                                  // DUE IN 1 DAY (orange/warning)
-                                  return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-500 text-white">DUE IN 1 DAY</span>;
-                                } else if (daysDiff === 2) {
-                                  // DUE IN 2 DAYS (yellow/amber)
-                                  return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500 text-white">DUE IN 2 DAYS</span>;
-                                } else if (daysDiff <= 7) {
-                                  // DUE IN 3-7 DAYS (blue/info)
-                                  return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500 text-white">DUE IN {daysDiff} DAYS</span>;
-                                } else {
-                                  // DUE IN 8+ DAYS (green/success)
-                                  return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-500 text-white">DUE IN {daysDiff} DAYS</span>;
-                                }
-                              }
-                              return null;
-                            })()}
+                            <DueStatusBadge
+                              pickupDeadline={racquet.pickup_deadline}
+                              status={racquet.status}
+                            />
                           </TableCell>
                           <TableCell>{racquet.string_tension ? `${racquet.string_tension} lbs` : 'N/A'}</TableCell>
                           <TableCell>
