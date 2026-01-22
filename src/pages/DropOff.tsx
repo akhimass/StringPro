@@ -74,7 +74,6 @@ export default function DropOff() {
       customerPhone: '',
       customerEmail: '',
       racquetBrand: '',
-      racquetModel: '',
       stringId: '',
       tension: '',
       notes: '',
@@ -291,17 +290,6 @@ export default function DropOff() {
                     )}
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="racquetModel">Racquet Model</Label>
-                    <Input
-                      id="racquetModel"
-                      {...register('racquetModel')}
-                      placeholder="Pro Staff RF97"
-                    />
-                    {errors.racquetModel && (
-                      <p className="text-sm text-destructive">{errors.racquetModel.message}</p>
-                    )}
-                  </div>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
