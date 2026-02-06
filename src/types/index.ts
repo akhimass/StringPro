@@ -29,7 +29,17 @@ export interface RacquetJob {
   strings?: StringOption | null;
 }
 
-export type RacquetStatus = 'processing' | 'in-progress' | 'complete' | 'cancelled' | 'delivered';
+export type RacquetStatus =
+  | 'received'
+  | 'ready-for-stringing'
+  | 'received-by-stringer'
+  | 'complete'
+  | 'waiting-pickup'
+  | 'delivered'
+  | 'cancelled'
+  // Legacy statuses for backwards compatibility
+  | 'processing'
+  | 'in-progress';
 
 export interface RacquetJobFormData {
   member_name: string;
@@ -39,6 +49,15 @@ export interface RacquetJobFormData {
   string_id: string;
   string_tension: number;
   notes?: string;
+}
+
+// Add-on selections for intake form
+export interface IntakeAddOns {
+  rushService: 'none' | '1-day' | '2-hour';
+  stringerOption: 'default' | 'stringer-a';
+  grommetRepair: boolean;
+  stencilRequest: string;
+  gripAddOn: boolean;
 }
 
 // Legacy types for backwards compatibility during transition

@@ -8,6 +8,10 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { DueStatusBadge } from '@/components/DueStatusBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { TimelineDrawer } from '@/components/TimelineDrawer';
+import { PaymentStatusBadge } from '@/components/admin/PaymentStatusBadge';
+import { MarkAsPaidDialog } from '@/components/admin/MarkAsPaidDialog';
+import { FrontDeskReceiveDialog } from '@/components/admin/FrontDeskReceiveDialog';
+import { PickupCompleteDialog } from '@/components/admin/PickupCompleteDialog';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,13 +51,15 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Package, Settings, Clock, AlertTriangle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Package, Settings, Clock, AlertTriangle, ClipboardCheck, DollarSign } from 'lucide-react';
 
 const statusOptions: { value: RacquetStatus; label: string }[] = [
-  { value: 'processing', label: 'Processing' },
-  { value: 'in-progress', label: 'In Progress' },
-  { value: 'complete', label: 'Complete' },
-  { value: 'delivered', label: 'Delivered' },
+  { value: 'received', label: 'Received by Front Desk' },
+  { value: 'ready-for-stringing', label: 'Ready for Stringing' },
+  { value: 'received-by-stringer', label: 'Received by Stringer' },
+  { value: 'complete', label: 'Ready for Pickup' },
+  { value: 'waiting-pickup', label: 'Waiting Pickup' },
+  { value: 'delivered', label: 'Pickup Completed' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
@@ -76,6 +82,21 @@ export default function Admin() {
   // Timeline drawer state
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [timelineRacquet, setTimelineRacquet] = useState<RacquetJob | null>(null);
+
+  // Payment dialog state
+  const [payDialogOpen, setPayDialogOpen] = useState(false);
+  const [payRacquet, setPayRacquet] = useState<RacquetJob | null>(null);
+
+  // Front desk receive dialog state
+  const [receiveDialogOpen, setReceiveDialogOpen] = useState(false);
+  const [receiveRacquet, setReceiveRacquet] = useState<RacquetJob | null>(null);
+
+  // Pickup complete dialog state
+  const [pickupDialogOpen, setPickupDialogOpen] = useState(false);
+  const [pickupRacquet, setPickupRacquet] = useState<RacquetJob | null>(null);
+
+  // UI-only payment tracking (no persistence)
+  const [paidJobs, setPaidJobs] = useState<Record<string, { staffName: string; paidAt: string }>>({});
 
   // Queries
   const { data: racquets = [], isLoading: racquetsLoading, error: racquetsError } = useQuery({
@@ -212,6 +233,39 @@ export default function Admin() {
     setSearchParams({ tab: value });
   };
 
+  // Payment handlers
+  const handleMarkAsPaid = (staffName: string) => {
+    if (payRacquet) {
+      setPaidJobs((prev) => ({
+        ...prev,
+        [payRacquet.id]: { staffName, paidAt: new Date().toISOString() },
+      }));
+      toast.success(`Payment confirmed by ${staffName}`);
+      setPayDialogOpen(false);
+      setPayRacquet(null);
+    }
+  };
+
+  // Front desk receive handler
+  const handleFrontDeskReceive = (staffName: string) => {
+    if (receiveRacquet) {
+      updateStatusMutation.mutate({ id: receiveRacquet.id, status: 'received' });
+      toast.success(`Received by ${staffName} at front desk`);
+      setReceiveDialogOpen(false);
+      setReceiveRacquet(null);
+    }
+  };
+
+  // Pickup complete handler
+  const handlePickupComplete = (data: { paymentVerified: boolean; signature: string; notes: string }) => {
+    if (pickupRacquet) {
+      updateStatusMutation.mutate({ id: pickupRacquet.id, status: 'delivered' });
+      toast.success(`Pickup completed — signed by ${data.signature}`);
+      setPickupDialogOpen(false);
+      setPickupRacquet(null);
+    }
+  };
+
   // Show error state if queries fail
   if (racquetsError || stringsError) {
     return (
@@ -276,7 +330,7 @@ export default function Admin() {
                   className="sm:max-w-xs"
                 />
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="sm:w-40">
+                  <SelectTrigger className="sm:w-48">
                     <SelectValue placeholder="Filter status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -309,124 +363,160 @@ export default function Admin() {
                         <TableHead>Racquet</TableHead>
                         <TableHead>String</TableHead>
                         <TableHead>Drop-off</TableHead>
-                        <TableHead>Pickup</TableHead>
                         <TableHead>Due Status</TableHead>
                         <TableHead>Tension</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Payment</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredRacquets.map((racquet) => (
-                        <TableRow key={racquet.id} className="group">
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">{racquet.member_name}</p>
-                              <p className="text-xs text-muted-foreground">{racquet.email}</p>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <p className="font-medium">
-                              {racquet.racquet_type 
-                                ? racquet.racquet_type.replace(/\s+undefined\s*/gi, '').trim() || 'N/A'
-                                : 'N/A'}
-                            </p>
-                          </TableCell>
-                          <TableCell className="text-sm">{getStringName(racquet)}</TableCell>
-                          <TableCell className="text-sm">
-                            {racquet.drop_in_date ? (() => {
-                              try {
-                                return format(parseISO(racquet.drop_in_date), 'MMM d, yyyy');
-                              } catch {
-                                return racquet.drop_in_date;
-                              }
-                            })() : 'N/A'}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {racquet.pickup_deadline ? (() => {
-                              try {
-                                return format(parseISO(racquet.pickup_deadline), 'MMM d, yyyy');
-                              } catch {
-                                return racquet.pickup_deadline;
-                              }
-                            })() : 'N/A'}
-                          </TableCell>
-                          <TableCell>
-                            <DueStatusBadge
-                              pickupDeadline={racquet.pickup_deadline}
-                              status={racquet.status}
-                            />
-                          </TableCell>
-                          <TableCell className="text-sm">{racquet.string_tension ? `${racquet.string_tension} lbs` : 'N/A'}</TableCell>
-                          <TableCell>
-                            {racquet.status ? (
-                              <StatusBadge status={racquet.status} />
-                            ) : (
-                              <StatusBadge status="processing" />
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              {/* Timeline */}
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                title="View timeline"
-                                onClick={() => {
-                                  setTimelineRacquet(racquet);
-                                  setTimelineOpen(true);
-                                }}
-                                className="opacity-60 group-hover:opacity-100"
-                              >
-                                <Clock className="w-4 h-4" />
-                              </Button>
-
-                              <Select
-                                value={(racquet.status || 'processing') as RacquetStatus}
-                                onValueChange={(value: RacquetStatus) =>
-                                  updateStatusMutation.mutate({ id: racquet.id, status: value })
+                      {filteredRacquets.map((racquet) => {
+                        const isPaid = !!paidJobs[racquet.id];
+                        return (
+                          <TableRow key={racquet.id} className="group">
+                            <TableCell>
+                              <div>
+                                <p className="font-medium">{racquet.member_name}</p>
+                                <p className="text-xs text-muted-foreground">{racquet.email}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <p className="font-medium">
+                                {racquet.racquet_type
+                                  ? racquet.racquet_type.replace(/\s+undefined\s*/gi, '').trim() || 'N/A'
+                                  : 'N/A'}
+                              </p>
+                            </TableCell>
+                            <TableCell className="text-sm">{getStringName(racquet)}</TableCell>
+                            <TableCell className="text-sm">
+                              {racquet.drop_in_date ? (() => {
+                                try {
+                                  return format(parseISO(racquet.drop_in_date), 'MMM d, yyyy');
+                                } catch {
+                                  return racquet.drop_in_date;
                                 }
-                              >
-                                <SelectTrigger className="w-32 h-8 text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {statusOptions.map((opt) => (
-                                    <SelectItem key={opt.value} value={opt.value}>
-                                      {opt.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-
-                              {racquet.status !== 'delivered' && (
+                              })() : 'N/A'}
+                            </TableCell>
+                            <TableCell>
+                              <DueStatusBadge
+                                pickupDeadline={racquet.pickup_deadline}
+                                status={racquet.status}
+                              />
+                            </TableCell>
+                            <TableCell className="text-sm">{racquet.string_tension ? `${racquet.string_tension} lbs` : 'N/A'}</TableCell>
+                            {/* Amount Due (UI placeholder - $25 base) */}
+                            <TableCell className="text-sm font-medium">$25.00</TableCell>
+                            {/* Payment Status */}
+                            <TableCell>
+                              <PaymentStatusBadge paid={isPaid} />
+                            </TableCell>
+                            <TableCell>
+                              {racquet.status ? (
+                                <StatusBadge status={racquet.status} />
+                              ) : (
+                                <StatusBadge status="received" />
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                {/* Timeline */}
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  title="Mark delivered"
-                                  onClick={() => updateStatusMutation.mutate({ id: racquet.id, status: 'delivered' })}
+                                  title="View timeline"
+                                  onClick={() => {
+                                    setTimelineRacquet(racquet);
+                                    setTimelineOpen(true);
+                                  }}
                                   className="opacity-60 group-hover:opacity-100"
                                 >
-                                  <Package className="w-4 h-4" />
+                                  <Clock className="w-4 h-4" />
                                 </Button>
-                              )}
 
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                title="Delete racquet"
-                                onClick={() => {
-                                  setRacquetToDelete(racquet);
-                                  setDeleteDialogOpen(true);
-                                }}
-                                className="text-destructive hover:text-destructive hover:bg-destructive/10 opacity-60 group-hover:opacity-100"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                                {/* Front Desk Receive */}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Received by front desk"
+                                  onClick={() => {
+                                    setReceiveRacquet(racquet);
+                                    setReceiveDialogOpen(true);
+                                  }}
+                                  className="opacity-60 group-hover:opacity-100"
+                                >
+                                  <ClipboardCheck className="w-4 h-4" />
+                                </Button>
+
+                                {/* Mark as Paid */}
+                                {!isPaid && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    title="Mark as paid"
+                                    onClick={() => {
+                                      setPayRacquet(racquet);
+                                      setPayDialogOpen(true);
+                                    }}
+                                    className="opacity-60 group-hover:opacity-100 text-primary"
+                                  >
+                                    <DollarSign className="w-4 h-4" />
+                                  </Button>
+                                )}
+
+                                {/* Status selector */}
+                                <Select
+                                  value={(racquet.status || 'received') as RacquetStatus}
+                                  onValueChange={(value: RacquetStatus) =>
+                                    updateStatusMutation.mutate({ id: racquet.id, status: value })
+                                  }
+                                >
+                                  <SelectTrigger className="w-36 h-8 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {statusOptions.map((opt) => (
+                                      <SelectItem key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+
+                                {/* Pickup Complete */}
+                                {racquet.status !== 'delivered' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    title="Complete pickup"
+                                    onClick={() => {
+                                      setPickupRacquet(racquet);
+                                      setPickupDialogOpen(true);
+                                    }}
+                                    className="opacity-60 group-hover:opacity-100"
+                                  >
+                                    <Package className="w-4 h-4" />
+                                  </Button>
+                                )}
+
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Delete racquet"
+                                  onClick={() => {
+                                    setRacquetToDelete(racquet);
+                                    setDeleteDialogOpen(true);
+                                  }}
+                                  className="text-destructive hover:text-destructive hover:bg-destructive/10 opacity-60 group-hover:opacity-100"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 )}
@@ -541,7 +631,7 @@ export default function Admin() {
                   id="brand"
                   value={stringForm.brand}
                   onChange={(e) => setStringForm({ ...stringForm, brand: e.target.value })}
-                  placeholder="e.g., Babolat"
+                  placeholder="e.g., Yonex"
                 />
               </div>
               <div className="space-y-2">
@@ -550,7 +640,7 @@ export default function Admin() {
                   id="name"
                   value={stringForm.name}
                   onChange={(e) => setStringForm({ ...stringForm, name: e.target.value })}
-                  placeholder="e.g., RPM Blast"
+                  placeholder="e.g., BG65"
                 />
               </div>
               <div className="space-y-2">
@@ -559,7 +649,7 @@ export default function Admin() {
                   id="gauge"
                   value={stringForm.gauge}
                   onChange={(e) => setStringForm({ ...stringForm, gauge: e.target.value })}
-                  placeholder="e.g., 1.25mm"
+                  placeholder="e.g., 0.70mm"
                 />
               </div>
               <div className="flex items-center justify-between">
@@ -622,6 +712,31 @@ export default function Admin() {
           open={timelineOpen}
           onOpenChange={setTimelineOpen}
           racquet={timelineRacquet}
+        />
+
+        {/* Mark as Paid Dialog */}
+        <MarkAsPaidDialog
+          open={payDialogOpen}
+          onOpenChange={setPayDialogOpen}
+          racquet={payRacquet}
+          amountDue={25}
+          onConfirm={handleMarkAsPaid}
+        />
+
+        {/* Front Desk Receive Dialog */}
+        <FrontDeskReceiveDialog
+          open={receiveDialogOpen}
+          onOpenChange={setReceiveDialogOpen}
+          racquet={receiveRacquet}
+          onConfirm={handleFrontDeskReceive}
+        />
+
+        {/* Pickup Complete Dialog */}
+        <PickupCompleteDialog
+          open={pickupDialogOpen}
+          onOpenChange={setPickupDialogOpen}
+          racquet={pickupRacquet}
+          onConfirm={handlePickupComplete}
         />
       </main>
     </div>

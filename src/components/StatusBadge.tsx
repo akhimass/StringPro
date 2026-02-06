@@ -5,36 +5,54 @@ interface StatusBadgeProps {
   status: RacquetStatus;
 }
 
-const statusConfig: Record<RacquetStatus, { label: string; className: string }> = {
-  processing: {
-    label: 'Processing',
+const statusConfig: Record<string, { label: string; className: string }> = {
+  // New club statuses
+  received: {
+    label: 'Received by Front Desk',
     className: 'bg-status-pending-bg text-status-pending',
   },
-  'in-progress': {
-    label: 'In Progress',
+  'ready-for-stringing': {
+    label: 'Ready for Stringing',
+    className: 'bg-status-progress-bg text-status-progress',
+  },
+  'received-by-stringer': {
+    label: 'Received by Stringer',
     className: 'bg-status-progress-bg text-status-progress',
   },
   complete: {
-    label: 'Complete',
+    label: 'Ready for Pickup',
     className: 'bg-status-complete-bg text-status-complete',
   },
+  'waiting-pickup': {
+    label: 'Waiting Pickup',
+    className: 'bg-amber-500/20 text-amber-400',
+  },
   delivered: {
-    label: 'Delivered',
-    className: 'bg-green-100 text-green-800',
+    label: 'Pickup Completed',
+    className: 'bg-green-100/10 text-green-400',
   },
   cancelled: {
     label: 'Cancelled',
     className: 'bg-status-cancelled-bg text-status-cancelled',
   },
+  // Legacy mappings
+  processing: {
+    label: 'Received by Front Desk',
+    className: 'bg-status-pending-bg text-status-pending',
+  },
+  'in-progress': {
+    label: 'Received by Stringer',
+    className: 'bg-status-progress-bg text-status-progress',
+  },
 };
 
 export function StatusBadge({ status }: StatusBadgeProps) {
-  const config = statusConfig[status];
+  const config = statusConfig[status] || statusConfig.received;
 
   return (
     <span
       className={cn(
-        'inline-flex items-center px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wide',
+        'inline-flex items-center px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap',
         config.className
       )}
     >

@@ -44,8 +44,8 @@ const dueConfig: Record<DueLevel, DueConfig> = {
 };
 
 export function DueStatusBadge({ pickupDeadline, status }: DueStatusBadgeProps) {
-  // Don't show due status for delivered items
-  if (status === 'delivered' || !pickupDeadline) {
+  // Don't show due status for delivered/completed items
+  if (status === 'delivered' || status === 'cancelled' || !pickupDeadline) {
     return null;
   }
 
