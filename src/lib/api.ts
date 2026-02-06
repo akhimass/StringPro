@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/lib/supabase';
 import { StringOption, RacquetJob, RacquetFormData, RacquetStatus } from '@/types';
 import { normalizeUSPhone } from '@/lib/validation';
 
