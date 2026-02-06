@@ -7,6 +7,10 @@ import { normalizeUSPhone, isValidEmail } from '@/lib/validation';
 import { fetchStrings, createRacquet } from '@/lib/api';
 import { RacquetFormData } from '@/types';
 import { Header } from '@/components/Header';
+import { RequiredLabel } from '@/components/RequiredLabel';
+import { PriceSummaryCard } from '@/components/PriceSummaryCard';
+import { WaiverSection } from '@/components/WaiverSection';
+import { VerificationInput } from '@/components/VerificationInput';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,6 +22,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -42,7 +51,8 @@ const formSchema = z.object({
     }, { message: 'Tension must be a valid number between 1 and 100 lbs.' }),
   notes: z.string().max(500).optional(),
   dropInDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
-  termsAccepted: z.boolean().refine((v) => v === true, { message: 'You must accept the terms & conditions.' }),
+  termsAccepted: z.boolean().refine((v) => v === true, { message: 'You must accept the waiver & terms.' }),
+  signature: z.string().min(1, 'Signature is required').max(100),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -50,6 +60,10 @@ type FormValues = z.infer<typeof formSchema>;
 export default function DropOff() {
   const [submitted, setSubmitted] = useState(false);
   const queryClient = useQueryClient();
+
+  // UI-only verification state (no real verification logic)
+  const [phoneVerified] = useState(false);
+  const [emailVerified] = useState(false);
 
   const { data: strings = [], isLoading: stringsLoading } = useQuery({
     queryKey: ['strings'],
@@ -79,7 +93,6 @@ export default function DropOff() {
       stringId: '',
       tension: '',
       notes: '',
-      // Default dropInDate to today local
       dropInDate: (() => {
         const d = new Date();
         const y = d.getFullYear();
@@ -88,19 +101,17 @@ export default function DropOff() {
         return `${y}-${m}-${day}`;
       })(),
       termsAccepted: false,
+      signature: '',
     },
   });
 
   const mutation = useMutation({
     mutationFn: (data: RacquetFormData) => createRacquet(data),
     onSuccess: (res) => {
-      // Log returned record for easy verification during development
-      // (temporary, remove after confirming values in DB or network)
       // eslint-disable-next-line no-console
       console.log('createRacquet succeeded:', res);
       queryClient.invalidateQueries({ queryKey: ['racquets'] });
       setSubmitted(true);
-      // Show pickup date in success message when available
       const pickup = (res as any)?.pickup_deadline || (res as any)?.pickupDeadline || null;
       toast.success(pickup ? `Racquet submitted! Pickup by ${pickup}` : 'Racquet submitted successfully!');
     },
@@ -110,7 +121,6 @@ export default function DropOff() {
   });
 
   const onSubmit = (data: FormValues) => {
-    // Compute drop-in date (ISO yyyy-mm-dd) - default to today if not provided
     const toLocalDateString = (d: Date) => {
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -118,21 +128,18 @@ export default function DropOff() {
       return `${y}-${m}-${day}`;
     };
 
-    // Ensure dropInDate is present (form defaults to today). Use provided value.
     const dropInDate = (data as any).dropInDate || toLocalDateString(new Date());
 
-    // Parse the dropInDate as local date (construct using components to avoid UTC offset) and add 3 days
     const [yStr, mStr, dStr] = dropInDate.split('-');
     const dropDateObj = new Date(Number(yStr), Number(mStr) - 1, Number(dStr));
     dropDateObj.setDate(dropDateObj.getDate() + 3);
     const pickupDeadline = toLocalDateString(dropDateObj);
 
-    // Normalize phone to E.164 and email to trimmed lowercase before sending
     const normalizedPhone = normalizeUSPhone(data.customerPhone) as string;
     const normalizedEmail = data.customerEmail.trim().toLowerCase();
 
     const payload = {
-      ...(data as RacquetFormData),
+      ...(data as unknown as RacquetFormData),
       customerPhone: normalizedPhone,
       customerEmail: normalizedEmail,
       dropInDate,
@@ -140,7 +147,6 @@ export default function DropOff() {
       termsAccepted: data.termsAccepted,
     } as RacquetFormData;
 
-    // Temporary log to confirm payload (inspect in browser DevTools network/console)
     // eslint-disable-next-line no-console
     console.log('DropOff submit payload:', payload);
 
@@ -162,6 +168,16 @@ export default function DropOff() {
     reset();
     setSubmitted(false);
   };
+
+  // Get selected string for price summary
+  const selectedStringId = watch('stringId');
+  const selectedString = activeStrings.find((s) => s.id === selectedStringId);
+  const selectedStringLabel = selectedString
+    ? `${selectedString.brand || ''} ${selectedString.name}`.trim()
+    : undefined;
+
+  // Check if form can be submitted (UI-only disabled state)
+  const canSubmit = true; // In production: phoneVerified && emailVerified
 
   if (submitted) {
     return (
@@ -193,6 +209,9 @@ export default function DropOff() {
             <p className="text-muted-foreground">
               Fill out the form below to submit your racquet for stringing.
             </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Fields marked with <span className="text-destructive">*</span> are required
+            </p>
           </div>
 
           {!stringsLoading && activeStrings.length === 0 ? (
@@ -216,7 +235,8 @@ export default function DropOff() {
               </div>
             </div>
           ) : (
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 animate-fade-in">
+            <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6 animate-fade-in">
+              {/* Customer Information */}
               <div className="card-elevated p-6 space-y-4">
                 <h2 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
                   Customer Information
@@ -224,11 +244,12 @@ export default function DropOff() {
                 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="customerName">Full Name</Label>
+                    <RequiredLabel htmlFor="customerName">Full Name</RequiredLabel>
                     <Input
                       id="customerName"
                       {...register('customerName')}
                       placeholder="John Smith"
+                      aria-invalid={!!errors.customerName}
                     />
                     {errors.customerName && (
                       <p className="text-sm text-destructive">{errors.customerName.message}</p>
@@ -236,44 +257,46 @@ export default function DropOff() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="customerPhone">Phone</Label>
+                    <RequiredLabel htmlFor="dropInDate">Drop-off Date</RequiredLabel>
                     <Input
-                      id="customerPhone"
-                      {...register('customerPhone', {
-                        onBlur: () => trigger('customerPhone'),
-                      })}
-                      placeholder="555-0123"
+                      id="dropInDate"
+                      type="date"
+                      {...register('dropInDate')}
+                      aria-invalid={!!errors.dropInDate}
                     />
-                    {errors.customerPhone && (
-                      <p className="text-sm text-destructive">{errors.customerPhone.message}</p>
+                    {errors.dropInDate && (
+                      <p className="text-sm text-destructive">{errors.dropInDate.message}</p>
                     )}
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="customerEmail">Email</Label>
-                  <Input
-                    id="customerEmail"
-                    type="email"
-                    {...register('customerEmail', {
-                      onBlur: () => trigger('customerEmail'),
-                    })}
-                    placeholder="john@email.com"
-                  />
-                  {errors.customerEmail && (
-                    <p className="text-sm text-destructive">{errors.customerEmail.message}</p>
-                  )}
-                </div>
+                {/* Phone with verification */}
+                <VerificationInput
+                  id="customerPhone"
+                  label="Phone"
+                  placeholder="(555) 123-4567"
+                  value={watch('customerPhone')}
+                  error={errors.customerPhone?.message}
+                  verified={phoneVerified}
+                  onBlur={() => trigger('customerPhone')}
+                  register={register('customerPhone')}
+                />
 
-                <div className="space-y-2">
-                  <Label htmlFor="dropInDate">Drop-off Date</Label>
-                  <Input id="dropInDate" type="date" {...register('dropInDate')} />
-                  {errors.dropInDate && (
-                    <p className="text-sm text-destructive">{errors.dropInDate.message}</p>
-                  )}
-                </div>
+                {/* Email with verification */}
+                <VerificationInput
+                  id="customerEmail"
+                  label="Email"
+                  type="email"
+                  placeholder="john@email.com"
+                  value={watch('customerEmail')}
+                  error={errors.customerEmail?.message}
+                  verified={emailVerified}
+                  onBlur={() => trigger('customerEmail')}
+                  register={register('customerEmail')}
+                />
               </div>
 
+              {/* Racquet Details */}
               <div className="card-elevated p-6 space-y-4">
                 <h2 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
                   Racquet Details
@@ -281,11 +304,12 @@ export default function DropOff() {
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="racquetBrand">Racquet Brand</Label>
+                    <RequiredLabel htmlFor="racquetBrand">Racquet Brand</RequiredLabel>
                     <Input
                       id="racquetBrand"
                       {...register('racquetBrand')}
                       placeholder="Wilson"
+                      aria-invalid={!!errors.racquetBrand}
                     />
                     {errors.racquetBrand && (
                       <p className="text-sm text-destructive">{errors.racquetBrand.message}</p>
@@ -293,7 +317,7 @@ export default function DropOff() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="racquetModel">Racquet Model (Optional)</Label>
+                    <Label htmlFor="racquetModel">Racquet Model</Label>
                     <Input
                       id="racquetModel"
                       {...register('racquetModel')}
@@ -307,12 +331,12 @@ export default function DropOff() {
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>String Required</Label>
+                    <RequiredLabel>String Required</RequiredLabel>
                     <Select
                       value={watch('stringId')}
                       onValueChange={(value) => setValue('stringId', value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger aria-invalid={!!errors.stringId}>
                         <SelectValue placeholder="Select a string" />
                       </SelectTrigger>
                       <SelectContent>
@@ -331,7 +355,7 @@ export default function DropOff() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="tension">Tension (lbs)</Label>
+                    <RequiredLabel htmlFor="tension">Tension (lbs)</RequiredLabel>
                     <Input
                       id="tension"
                       type="number"
@@ -342,6 +366,7 @@ export default function DropOff() {
                         onBlur: () => trigger('tension'),
                       })}
                       placeholder="52"
+                      aria-invalid={!!errors.tension}
                     />
                     {errors.tension && (
                       <p className="text-sm text-destructive">{errors.tension.message}</p>
@@ -350,7 +375,7 @@ export default function DropOff() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="notes">Notes (Optional)</Label>
+                  <Label htmlFor="notes">Notes</Label>
                   <Textarea
                     id="notes"
                     {...register('notes')}
@@ -361,31 +386,41 @@ export default function DropOff() {
                     <p className="text-sm text-destructive">{errors.notes.message}</p>
                   )}
                 </div>
-
-                <div className="flex items-start gap-3">
-                  <input
-                    id="termsAccepted"
-                    type="checkbox"
-                    {...register('termsAccepted')}
-                    className="mt-1"
-                  />
-                  <div>
-                    <Label htmlFor="termsAccepted">I accept the terms &amp; conditions</Label>
-                    {errors.termsAccepted && (
-                      <p className="text-sm text-destructive">{errors.termsAccepted.message}</p>
-                    )}
-                  </div>
-                </div>
               </div>
 
-              <Button
-                type="submit"
-                className="w-full"
-                size="lg"
-                disabled={mutation.isPending}
-              >
-                {mutation.isPending ? 'Submitting...' : 'Submit Racquet'}
-              </Button>
+              {/* Price Summary */}
+              <PriceSummaryCard stringName={selectedStringLabel} />
+
+              {/* Waiver & Terms */}
+              <WaiverSection
+                termsAccepted={watch('termsAccepted')}
+                onTermsChange={(checked) => setValue('termsAccepted', checked, { shouldValidate: true })}
+                signature={watch('signature')}
+                onSignatureChange={(val) => setValue('signature', val, { shouldValidate: true })}
+                termsError={errors.termsAccepted?.message}
+                signatureError={errors.signature?.message}
+              />
+
+              {/* Submit */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      size="lg"
+                      disabled={mutation.isPending || !canSubmit}
+                    >
+                      {mutation.isPending ? 'Submitting...' : 'Submit Racquet'}
+                    </Button>
+                  </div>
+                </TooltipTrigger>
+                {!canSubmit && (
+                  <TooltipContent>
+                    <p>Verify email and phone to continue</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
             </form>
           )}
         </div>

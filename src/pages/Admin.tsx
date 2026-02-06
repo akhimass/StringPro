@@ -6,6 +6,8 @@ import { RacquetStatus, StringOption, RacquetJob } from '@/types';
 import { Header } from '@/components/Header';
 import { StatusBadge } from '@/components/StatusBadge';
 import { DueStatusBadge } from '@/components/DueStatusBadge';
+import { EmptyState } from '@/components/EmptyState';
+import { TimelineDrawer } from '@/components/TimelineDrawer';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,7 +47,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Package, Settings } from 'lucide-react';
+import { Plus, Pencil, Trash2, Package, Settings, Clock, AlertTriangle } from 'lucide-react';
 
 const statusOptions: { value: RacquetStatus; label: string }[] = [
   { value: 'processing', label: 'Processing' },
@@ -70,6 +72,10 @@ export default function Admin() {
   // Delete racquet dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [racquetToDelete, setRacquetToDelete] = useState<RacquetJob | null>(null);
+
+  // Timeline drawer state
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [timelineRacquet, setTimelineRacquet] = useState<RacquetJob | null>(null);
 
   // Queries
   const { data: racquets = [], isLoading: racquetsLoading, error: racquetsError } = useQuery({
@@ -220,7 +226,10 @@ export default function Admin() {
           </div>
           <div className="card-elevated p-6">
             <div className="text-center py-8">
-              <p className="text-destructive mb-4">
+              <div className="w-12 h-12 rounded-lg bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-6 h-6 text-destructive" />
+              </div>
+              <p className="text-destructive font-medium mb-2">
                 {racquetsError ? 'Failed to load racquets. ' : ''}
                 {stringsError ? 'Failed to load strings.' : ''}
               </p>
@@ -282,40 +291,38 @@ export default function Admin() {
               </div>
 
               <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Racquet</TableHead>
-                      <TableHead>String</TableHead>
-                      <TableHead>Drop-off</TableHead>
-                      <TableHead>Pickup</TableHead>
-                      <TableHead>Due Status</TableHead>
-                      <TableHead>Tension</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {racquetsLoading ? (
+                {racquetsLoading ? (
+                  <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
+                ) : filteredRacquets.length === 0 ? (
+                  <EmptyState
+                    icon={Package}
+                    title="No racquets found"
+                    description={searchQuery || statusFilter !== 'all'
+                      ? 'Try adjusting your search or filter criteria.'
+                      : 'Racquet orders will appear here once customers submit drop-offs.'}
+                  />
+                ) : (
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                          Loading...
-                        </TableCell>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Racquet</TableHead>
+                        <TableHead>String</TableHead>
+                        <TableHead>Drop-off</TableHead>
+                        <TableHead>Pickup</TableHead>
+                        <TableHead>Due Status</TableHead>
+                        <TableHead>Tension</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
-                    ) : filteredRacquets.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                          No racquets found
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredRacquets.map((racquet) => (
-                        <TableRow key={racquet.id}>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredRacquets.map((racquet) => (
+                        <TableRow key={racquet.id} className="group">
                           <TableCell>
                             <div>
                               <p className="font-medium">{racquet.member_name}</p>
-                              <p className="text-sm text-muted-foreground">{racquet.email}</p>
+                              <p className="text-xs text-muted-foreground">{racquet.email}</p>
                             </div>
                           </TableCell>
                           <TableCell>
@@ -326,7 +333,7 @@ export default function Admin() {
                             </p>
                           </TableCell>
                           <TableCell className="text-sm">{getStringName(racquet)}</TableCell>
-                          <TableCell>
+                          <TableCell className="text-sm">
                             {racquet.drop_in_date ? (() => {
                               try {
                                 return format(parseISO(racquet.drop_in_date), 'MMM d, yyyy');
@@ -335,7 +342,7 @@ export default function Admin() {
                               }
                             })() : 'N/A'}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="text-sm">
                             {racquet.pickup_deadline ? (() => {
                               try {
                                 return format(parseISO(racquet.pickup_deadline), 'MMM d, yyyy');
@@ -350,7 +357,7 @@ export default function Admin() {
                               status={racquet.status}
                             />
                           </TableCell>
-                          <TableCell>{racquet.string_tension ? `${racquet.string_tension} lbs` : 'N/A'}</TableCell>
+                          <TableCell className="text-sm">{racquet.string_tension ? `${racquet.string_tension} lbs` : 'N/A'}</TableCell>
                           <TableCell>
                             {racquet.status ? (
                               <StatusBadge status={racquet.status} />
@@ -359,14 +366,28 @@ export default function Admin() {
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center justify-end gap-1">
+                              {/* Timeline */}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="View timeline"
+                                onClick={() => {
+                                  setTimelineRacquet(racquet);
+                                  setTimelineOpen(true);
+                                }}
+                                className="opacity-60 group-hover:opacity-100"
+                              >
+                                <Clock className="w-4 h-4" />
+                              </Button>
+
                               <Select
                                 value={(racquet.status || 'processing') as RacquetStatus}
                                 onValueChange={(value: RacquetStatus) =>
                                   updateStatusMutation.mutate({ id: racquet.id, status: value })
                                 }
                               >
-                                <SelectTrigger className="w-32">
+                                <SelectTrigger className="w-32 h-8 text-xs">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -378,19 +399,18 @@ export default function Admin() {
                                 </SelectContent>
                               </Select>
 
-                              {/* Quick action: mark delivered */}
                               {racquet.status !== 'delivered' && (
                                 <Button
                                   variant="ghost"
                                   size="icon"
                                   title="Mark delivered"
                                   onClick={() => updateStatusMutation.mutate({ id: racquet.id, status: 'delivered' })}
+                                  className="opacity-60 group-hover:opacity-100"
                                 >
                                   <Package className="w-4 h-4" />
                                 </Button>
                               )}
 
-                              {/* Delete racquet */}
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -399,17 +419,17 @@ export default function Admin() {
                                   setRacquetToDelete(racquet);
                                   setDeleteDialogOpen(true);
                                 }}
-                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10 opacity-60 group-hover:opacity-100"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </div>
             </div>
           </TabsContent>
@@ -428,38 +448,48 @@ export default function Admin() {
               </div>
 
               <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Brand</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Gauge</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {stringsLoading ? (
+                {stringsLoading ? (
+                  <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
+                ) : strings.length === 0 ? (
+                  <EmptyState
+                    icon={Settings}
+                    title="No strings added yet"
+                    description="Add your first string option to get started with racquet drop-offs."
+                  >
+                    <Button onClick={() => openStringDialog()} size="sm" variant="outline" className="gap-2">
+                      <Plus className="w-4 h-4" />
+                      Add Your First String
+                    </Button>
+                  </EmptyState>
+                ) : (
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                          Loading...
-                        </TableCell>
+                        <TableHead>Brand</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Gauge</TableHead>
+                        <TableHead>Price</TableHead>
+                        <TableHead>Qty</TableHead>
+                        <TableHead>Restock</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
-                    ) : strings.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                          No strings added yet
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      strings.map((string) => (
-                        <TableRow key={string.id}>
+                    </TableHeader>
+                    <TableBody>
+                      {strings.map((string) => (
+                        <TableRow key={string.id} className="group">
                           <TableCell className="font-medium">{string.brand}</TableCell>
                           <TableCell>{string.name}</TableCell>
                           <TableCell>{string.gauge}</TableCell>
+                          {/* UI placeholder columns */}
+                          <TableCell className="text-muted-foreground text-sm">—</TableCell>
+                          <TableCell>
+                            <span className="text-muted-foreground text-sm">—</span>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">—</TableCell>
                           <TableCell>
                             <span
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wide ${
                                 string.active
                                   ? 'bg-status-complete-bg text-status-complete'
                                   : 'bg-muted text-muted-foreground'
@@ -469,11 +499,12 @@ export default function Admin() {
                             </span>
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center justify-end gap-1">
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => openStringDialog(string)}
+                                className="opacity-60 group-hover:opacity-100"
                               >
                                 <Pencil className="w-4 h-4" />
                               </Button>
@@ -481,16 +512,17 @@ export default function Admin() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => deleteStringMutation.mutate(string.id)}
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10 opacity-60 group-hover:opacity-100"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </div>
             </div>
           </TabsContent>
@@ -561,7 +593,7 @@ export default function Admin() {
               <AlertDialogDescription>
                 Are you sure you want to delete this racquet order? This action cannot be undone.
                 {racquetToDelete && (
-                  <div className="mt-2 p-2 bg-muted rounded text-sm">
+                  <div className="mt-2 p-3 bg-muted rounded-md border border-border/60 text-sm">
                     <p className="font-medium">{racquetToDelete.member_name}</p>
                     <p className="text-muted-foreground">{racquetToDelete.racquet_type || 'N/A'}</p>
                   </div>
@@ -584,6 +616,13 @@ export default function Admin() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Timeline Drawer */}
+        <TimelineDrawer
+          open={timelineOpen}
+          onOpenChange={setTimelineOpen}
+          racquet={timelineRacquet}
+        />
       </main>
     </div>
   );
