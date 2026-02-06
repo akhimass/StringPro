@@ -31,6 +31,7 @@ const formSchema = z.object({
     .refine((val) => normalizeUSPhone(val) !== null, { message: 'Enter a valid US phone number (e.g., (555) 123-4567 or 555-123-4567).' }),
   customerEmail: z.string().min(1, 'Email is required').max(255).refine(isValidEmail, { message: 'Enter a valid email address.' }),
   racquetBrand: z.string().min(1, 'Racquet brand is required').max(100),
+  racquetModel: z.string().max(100).optional(),
   stringId: z.string().min(1, 'String selection is required'),
   tension: z
     .string()
@@ -74,6 +75,7 @@ export default function DropOff() {
       customerPhone: '',
       customerEmail: '',
       racquetBrand: '',
+      racquetModel: '',
       stringId: '',
       tension: '',
       notes: '',
@@ -290,6 +292,17 @@ export default function DropOff() {
                     )}
                   </div>
 
+                  <div className="space-y-2">
+                    <Label htmlFor="racquetModel">Racquet Model (Optional)</Label>
+                    <Input
+                      id="racquetModel"
+                      {...register('racquetModel')}
+                      placeholder="Blade 98"
+                    />
+                    {errors.racquetModel && (
+                      <p className="text-sm text-destructive">{errors.racquetModel.message}</p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
