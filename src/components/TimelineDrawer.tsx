@@ -21,10 +21,25 @@ interface TimelineEvent {
   current: boolean;
 }
 
-const statusOrder = ['processing', 'in-progress', 'complete', 'delivered'] as const;
+const statusOrder = [
+  'received',
+  'ready-for-stringing',
+  'received-by-stringer',
+  'complete',
+  'waiting-pickup',
+  'delivered',
+] as const;
+
+// Map legacy statuses to new ones for timeline position
+function resolveStatus(status: string | null): string {
+  if (status === 'processing') return 'received';
+  if (status === 'in-progress') return 'received-by-stringer';
+  return status || 'received';
+}
 
 function getTimelineEvents(racquet: RacquetJob): TimelineEvent[] {
-  const currentIdx = statusOrder.indexOf(racquet.status as any);
+  const resolved = resolveStatus(racquet.status);
+  const currentIdx = statusOrder.indexOf(resolved as any);
 
   const formatDate = (d: string | null) => {
     if (!d) return null;
@@ -37,28 +52,40 @@ function getTimelineEvents(racquet: RacquetJob): TimelineEvent[] {
 
   return [
     {
-      label: 'Drop-off received',
+      label: 'Received by Front Desk',
       date: formatDate(racquet.drop_in_date),
       completed: currentIdx >= 0,
       current: currentIdx === 0,
     },
     {
-      label: 'Stringing in progress',
+      label: 'Ready for Stringing',
       date: currentIdx >= 1 ? formatDate(racquet.updated_at) : null,
       completed: currentIdx >= 1,
       current: currentIdx === 1,
     },
     {
-      label: 'Stringing complete',
+      label: 'Received by Stringer',
       date: currentIdx >= 2 ? formatDate(racquet.updated_at) : null,
       completed: currentIdx >= 2,
       current: currentIdx === 2,
     },
     {
-      label: 'Delivered / Picked up',
+      label: 'Completed / Ready for Pickup',
       date: currentIdx >= 3 ? formatDate(racquet.updated_at) : null,
       completed: currentIdx >= 3,
       current: currentIdx === 3,
+    },
+    {
+      label: 'Waiting Pickup',
+      date: currentIdx >= 4 ? formatDate(racquet.updated_at) : null,
+      completed: currentIdx >= 4,
+      current: currentIdx === 4,
+    },
+    {
+      label: 'Pickup Completed',
+      date: currentIdx >= 5 ? formatDate(racquet.updated_at) : null,
+      completed: currentIdx >= 5,
+      current: currentIdx === 5,
     },
   ];
 }

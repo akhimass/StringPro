@@ -5,12 +5,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { normalizeUSPhone, isValidEmail } from '@/lib/validation';
 import { fetchStrings, createRacquet } from '@/lib/api';
-import { RacquetFormData } from '@/types';
+import { RacquetFormData, IntakeAddOns } from '@/types';
 import { Header } from '@/components/Header';
 import { RequiredLabel } from '@/components/RequiredLabel';
-import { PriceSummaryCard } from '@/components/PriceSummaryCard';
+import { PriceSummaryCard, calculateTotal } from '@/components/PriceSummaryCard';
 import { WaiverSection } from '@/components/WaiverSection';
 import { VerificationInput } from '@/components/VerificationInput';
+import { IntakeAddOnsSection } from '@/components/dropoff/IntakeAddOns';
+import { DropOffConfirmation } from '@/components/dropoff/DropOffConfirmation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -29,7 +31,7 @@ import {
 } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 const formSchema = z.object({
   customerName: z.string().min(1, 'Name is required').max(100),
@@ -57,9 +59,30 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
+function generateTicketNumber(id: string): string {
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  // Derive a 3-digit number from the UUID
+  const hex = id.replace(/-/g, '').slice(0, 6);
+  const num = (parseInt(hex, 16) % 999) + 1;
+  const xxx = String(num).padStart(3, '0');
+  return `CANAM${yy}${mm}${xxx}`;
+}
+
 export default function DropOff() {
   const [submitted, setSubmitted] = useState(false);
+  const [submittedTicket, setSubmittedTicket] = useState('');
   const queryClient = useQueryClient();
+
+  // Add-ons state
+  const [addOns, setAddOns] = useState<IntakeAddOns>({
+    rushService: 'none',
+    stringerOption: 'default',
+    grommetRepair: false,
+    stencilRequest: '',
+    gripAddOn: false,
+  });
 
   // UI-only verification state (no real verification logic)
   const [phoneVerified] = useState(false);
@@ -108,12 +131,11 @@ export default function DropOff() {
   const mutation = useMutation({
     mutationFn: (data: RacquetFormData) => createRacquet(data),
     onSuccess: (res) => {
-      // eslint-disable-next-line no-console
-      console.log('createRacquet succeeded:', res);
       queryClient.invalidateQueries({ queryKey: ['racquets'] });
+      const ticket = generateTicketNumber(res.id);
+      setSubmittedTicket(ticket);
       setSubmitted(true);
-      const pickup = (res as any)?.pickup_deadline || (res as any)?.pickupDeadline || null;
-      toast.success(pickup ? `Racquet submitted! Pickup by ${pickup}` : 'Racquet submitted successfully!');
+      toast.success(`Racquet submitted! Ticket: ${ticket}`);
     },
     onError: () => {
       toast.error('Failed to submit racquet');
@@ -147,9 +169,6 @@ export default function DropOff() {
       termsAccepted: data.termsAccepted,
     } as RacquetFormData;
 
-    // eslint-disable-next-line no-console
-    console.log('DropOff submit payload:', payload);
-
     mutation.mutate(payload);
   };
 
@@ -166,7 +185,15 @@ export default function DropOff() {
 
   const handleNewSubmission = () => {
     reset();
+    setAddOns({
+      rushService: 'none',
+      stringerOption: 'default',
+      grommetRepair: false,
+      stencilRequest: '',
+      gripAddOn: false,
+    });
     setSubmitted(false);
+    setSubmittedTicket('');
   };
 
   // Get selected string for price summary
@@ -184,16 +211,11 @@ export default function DropOff() {
       <div className="page-container">
         <Header />
         <main className="content-container">
-          <div className="max-w-lg mx-auto text-center py-16 animate-fade-in">
-            <div className="w-16 h-16 rounded-full bg-status-complete-bg flex items-center justify-center mx-auto mb-6">
-              <CheckCircle2 className="w-8 h-8 text-status-complete" />
-            </div>
-            <h1 className="text-2xl font-semibold mb-3">Racquet Submitted!</h1>
-            <p className="text-muted-foreground mb-8">
-              We'll contact you when your racquet is ready for pickup.
-            </p>
-            <Button onClick={handleNewSubmission}>Submit Another Racquet</Button>
-          </div>
+          <DropOffConfirmation
+            ticketNumber={submittedTicket}
+            amountDue={calculateTotal(addOns)}
+            onNewSubmission={handleNewSubmission}
+          />
         </main>
       </div>
     );
@@ -308,7 +330,7 @@ export default function DropOff() {
                     <Input
                       id="racquetBrand"
                       {...register('racquetBrand')}
-                      placeholder="Wilson"
+                      placeholder="Yonex"
                       aria-invalid={!!errors.racquetBrand}
                     />
                     {errors.racquetBrand && (
@@ -321,7 +343,7 @@ export default function DropOff() {
                     <Input
                       id="racquetModel"
                       {...register('racquetModel')}
-                      placeholder="Blade 98"
+                      placeholder="Astrox 99"
                     />
                     {errors.racquetModel && (
                       <p className="text-sm text-destructive">{errors.racquetModel.message}</p>
@@ -365,7 +387,7 @@ export default function DropOff() {
                       {...register('tension', {
                         onBlur: () => trigger('tension'),
                       })}
-                      placeholder="52"
+                      placeholder="24"
                       aria-invalid={!!errors.tension}
                     />
                     {errors.tension && (
@@ -388,8 +410,11 @@ export default function DropOff() {
                 </div>
               </div>
 
+              {/* Additional Services */}
+              <IntakeAddOnsSection addOns={addOns} onChange={setAddOns} />
+
               {/* Price Summary */}
-              <PriceSummaryCard stringName={selectedStringLabel} />
+              <PriceSummaryCard stringName={selectedStringLabel} addOns={addOns} />
 
               {/* Waiver & Terms */}
               <WaiverSection
