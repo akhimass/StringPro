@@ -59,20 +59,10 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-function generateTicketNumber(id: string): string {
-  const now = new Date();
-  const yy = String(now.getFullYear()).slice(-2);
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  // Derive a 3-digit number from the UUID
-  const hex = id.replace(/-/g, '').slice(0, 6);
-  const num = (parseInt(hex, 16) % 999) + 1;
-  const xxx = String(num).padStart(3, '0');
-  return `CANAM${yy}${mm}${xxx}`;
-}
-
 export default function DropOff() {
   const [submitted, setSubmitted] = useState(false);
   const [submittedTicket, setSubmittedTicket] = useState('');
+  const [submittedAmountDue, setSubmittedAmountDue] = useState<number | null>(null);
   const queryClient = useQueryClient();
 
   // Add-ons state
@@ -132,8 +122,9 @@ export default function DropOff() {
     mutationFn: (data: RacquetFormData) => createRacquet(data),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['racquets'] });
-      const ticket = generateTicketNumber(res.id);
+      const ticket = res.ticket_number || '';
       setSubmittedTicket(ticket);
+      setSubmittedAmountDue(typeof res.amount_due === 'number' ? res.amount_due : null);
       setSubmitted(true);
       toast.success(`Racquet submitted! Ticket: ${ticket}`);
     },
@@ -160,14 +151,15 @@ export default function DropOff() {
     const normalizedPhone = normalizeUSPhone(data.customerPhone) as string;
     const normalizedEmail = data.customerEmail.trim().toLowerCase();
 
-    const payload = {
+    const payload: RacquetFormData = {
       ...(data as unknown as RacquetFormData),
       customerPhone: normalizedPhone,
       customerEmail: normalizedEmail,
       dropInDate,
       pickupDeadline,
       termsAccepted: data.termsAccepted,
-    } as RacquetFormData;
+      addOns,
+    };
 
     mutation.mutate(payload);
   };
@@ -213,7 +205,10 @@ export default function DropOff() {
         <main className="content-container">
           <DropOffConfirmation
             ticketNumber={submittedTicket}
-            amountDue={calculateTotal(addOns)}
+            amountDue={
+              submittedAmountDue ??
+              calculateTotal(addOns, selectedString?.price ?? undefined)
+            }
             onNewSubmission={handleNewSubmission}
           />
         </main>
@@ -414,7 +409,11 @@ export default function DropOff() {
               <IntakeAddOnsSection addOns={addOns} onChange={setAddOns} />
 
               {/* Price Summary */}
-              <PriceSummaryCard stringName={selectedStringLabel} addOns={addOns} />
+              <PriceSummaryCard
+                stringName={selectedStringLabel}
+                addOns={addOns}
+                basePriceCents={selectedString?.price != null ? Math.round(Number(selectedString.price) * 100) : undefined}
+              />
 
               {/* Waiver & Terms */}
               <WaiverSection

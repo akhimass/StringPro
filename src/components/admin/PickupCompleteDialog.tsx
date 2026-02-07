@@ -17,7 +17,7 @@ interface PickupCompleteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   racquet: RacquetJob | null;
-  onConfirm: (data: { paymentVerified: boolean; signature: string; notes: string }) => void;
+  onConfirm: (data: { paymentVerified: boolean; staffName: string; signature: string; notes: string }) => void;
 }
 
 export function PickupCompleteDialog({
@@ -27,17 +27,24 @@ export function PickupCompleteDialog({
   onConfirm,
 }: PickupCompleteDialogProps) {
   const [paymentVerified, setPaymentVerified] = useState(false);
+  const [staffName, setStaffName] = useState('');
   const [signature, setSignature] = useState('');
   const [notes, setNotes] = useState('');
 
   const handleConfirm = () => {
-    if (!paymentVerified || !signature.trim()) return;
-    onConfirm({ paymentVerified, signature: signature.trim(), notes: notes.trim() });
+    if (!paymentVerified || !staffName.trim() || !signature.trim()) return;
+    onConfirm({
+      paymentVerified,
+      staffName: staffName.trim(),
+      signature: signature.trim(),
+      notes: notes.trim(),
+    });
     resetForm();
   };
 
   const resetForm = () => {
     setPaymentVerified(false);
+    setStaffName('');
     setSignature('');
     setNotes('');
   };
@@ -69,6 +76,20 @@ export function PickupCompleteDialog({
               <span className="text-muted-foreground">Racquet</span>
               <span className="font-medium">{racquet.racquet_type || 'N/A'}</span>
             </div>
+          </div>
+
+          {/* Staff name */}
+          <div className="space-y-2">
+            <Label htmlFor="pickupStaffName">
+              Staff Name <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="pickupStaffName"
+              value={staffName}
+              onChange={(e) => setStaffName(e.target.value)}
+              placeholder="Front desk staff name"
+              maxLength={100}
+            />
           </div>
 
           {/* Payment verification */}

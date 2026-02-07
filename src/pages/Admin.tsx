@@ -1,7 +1,18 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchRacquets, updateRacquetStatus, deleteRacquet, fetchStrings, createString, updateString, deleteString } from '@/lib/api';
+import {
+  fetchRacquets,
+  updateRacquetStatus,
+  deleteRacquet,
+  fetchStrings,
+  createString,
+  updateString,
+  deleteString,
+  markReceivedByFrontDesk,
+  markPaid,
+  markPickupCompleted,
+} from '@/lib/api';
 import { RacquetStatus, StringOption, RacquetJob } from '@/types';
 import { Header } from '@/components/Header';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -95,8 +106,20 @@ export default function Admin() {
   const [pickupDialogOpen, setPickupDialogOpen] = useState(false);
   const [pickupRacquet, setPickupRacquet] = useState<RacquetJob | null>(null);
 
-  // UI-only payment tracking (no persistence)
-  const [paidJobs, setPaidJobs] = useState<Record<string, { staffName: string; paidAt: string }>>({});
+  // Mutations for payment helpers
+  const markPaidMutation = useMutation({
+    mutationFn: ({ id, staffName }: { id: string; staffName: string }) => markPaid(id, staffName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['racquets'] });
+      toast.success('Payment marked as paid');
+    },
+    onError: (err: Error) => {
+      const msg = err?.message ?? 'Failed to mark payment as paid';
+      toast.error(msg);
+      // eslint-disable-next-line no-console
+      console.error('markPaid failed', err);
+    },
+  });
 
   // Queries
   const { data: racquets = [], isLoading: racquetsLoading, error: racquetsError } = useQuery({
@@ -235,34 +258,57 @@ export default function Admin() {
 
   // Payment handlers
   const handleMarkAsPaid = (staffName: string) => {
-    if (payRacquet) {
-      setPaidJobs((prev) => ({
-        ...prev,
-        [payRacquet.id]: { staffName, paidAt: new Date().toISOString() },
-      }));
-      toast.success(`Payment confirmed by ${staffName}`);
-      setPayDialogOpen(false);
-      setPayRacquet(null);
-    }
+    if (!payRacquet) return;
+    markPaidMutation.mutate(
+      { id: payRacquet.id, staffName },
+      {
+        onSuccess: () => {
+          setPayDialogOpen(false);
+          setPayRacquet(null);
+        },
+      }
+    );
   };
 
   // Front desk receive handler
   const handleFrontDeskReceive = (staffName: string) => {
     if (receiveRacquet) {
-      updateStatusMutation.mutate({ id: receiveRacquet.id, status: 'received' });
-      toast.success(`Received by ${staffName} at front desk`);
-      setReceiveDialogOpen(false);
-      setReceiveRacquet(null);
+      markReceivedByFrontDesk(receiveRacquet.id, staffName)
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ['racquets'] });
+          toast.success(`Received by ${staffName} at front desk`);
+        })
+        .catch(() => {
+          toast.error('Failed to mark as received by front desk');
+        })
+        .finally(() => {
+          setReceiveDialogOpen(false);
+          setReceiveRacquet(null);
+        });
     }
   };
 
   // Pickup complete handler
-  const handlePickupComplete = (data: { paymentVerified: boolean; signature: string; notes: string }) => {
+  const handlePickupComplete = (data: { paymentVerified: boolean; staffName: string; signature: string; notes: string }) => {
     if (pickupRacquet) {
-      updateStatusMutation.mutate({ id: pickupRacquet.id, status: 'delivered' });
-      toast.success(`Pickup completed — signed by ${data.signature}`);
-      setPickupDialogOpen(false);
-      setPickupRacquet(null);
+      if (pickupRacquet.payment_status !== 'paid') {
+        toast.error('Cannot complete pickup for unpaid job. Please mark as paid first.');
+        return;
+      }
+
+      markPickupCompleted(pickupRacquet.id, data.staffName, data.signature)
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ['racquets'] });
+          toast.success(`Pickup completed — signed by ${data.signature}`);
+        })
+        .catch((err) => {
+          console.error(err);
+          toast.error('Failed to complete pickup');
+        })
+        .finally(() => {
+          setPickupDialogOpen(false);
+          setPickupRacquet(null);
+        });
     }
   };
 
@@ -359,6 +405,7 @@ export default function Admin() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead>Ticket</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead>Racquet</TableHead>
                         <TableHead>String</TableHead>
@@ -373,9 +420,12 @@ export default function Admin() {
                     </TableHeader>
                     <TableBody>
                       {filteredRacquets.map((racquet) => {
-                        const isPaid = !!paidJobs[racquet.id];
+                        const isPaid = racquet.payment_status === 'paid';
                         return (
                           <TableRow key={racquet.id} className="group">
+                            <TableCell className="font-mono text-sm font-medium whitespace-nowrap">
+                              {racquet.ticket_number || '—'}
+                            </TableCell>
                             <TableCell>
                               <div>
                                 <p className="font-medium">{racquet.member_name}</p>
@@ -406,8 +456,12 @@ export default function Admin() {
                               />
                             </TableCell>
                             <TableCell className="text-sm">{racquet.string_tension ? `${racquet.string_tension} lbs` : 'N/A'}</TableCell>
-                            {/* Amount Due (UI placeholder - $25 base) */}
-                            <TableCell className="text-sm font-medium">$25.00</TableCell>
+                            {/* Amount Due */}
+                            <TableCell className="text-sm font-medium">
+                              {typeof racquet.amount_due === 'number'
+                                ? `$${racquet.amount_due.toFixed(2)}`
+                                : '—'}
+                            </TableCell>
                             {/* Payment Status */}
                             <TableCell>
                               <PaymentStatusBadge paid={isPaid} />
@@ -719,7 +773,7 @@ export default function Admin() {
           open={payDialogOpen}
           onOpenChange={setPayDialogOpen}
           racquet={payRacquet}
-          amountDue={25}
+          amountDue={payRacquet?.amount_due ?? 0}
           onConfirm={handleMarkAsPaid}
         />
 

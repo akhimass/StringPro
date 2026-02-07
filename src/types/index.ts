@@ -5,6 +5,7 @@ export interface StringOption {
   gauge: string | null;
   active: boolean | null;
   created_at?: string;
+  price?: number | null;
 }
 
 export interface RacquetJob {
@@ -20,6 +21,11 @@ export interface RacquetJob {
   terms_accepted: boolean | null;
   terms_accepted_at: string | null;
   status: RacquetStatus | null;
+  amount_due?: number | null;
+  payment_status?: 'unpaid' | 'paid';
+  paid_at?: string | null;
+  paid_by_staff?: string | null;
+   ticket_number?: string | null;
   pickup_deadline: string | null;
   reminder_2_sent: boolean | null;
   reminder_3_sent: boolean | null;
@@ -27,6 +33,15 @@ export interface RacquetJob {
   updated_at: string;
   // Joined data
   strings?: StringOption | null;
+  status_events?: StatusEvent[] | null;
+}
+
+export interface StatusEvent {
+  id: string;
+  job_id: string;
+  event_type: string;
+  staff_name: string | null;
+  created_at: string | null;
 }
 
 export type RacquetStatus =
@@ -90,4 +105,6 @@ export interface RacquetFormData {
   pickupDeadline?: string;
   // Terms checkbox value
   termsAccepted?: boolean;
+  // Optional add-ons for pricing
+  addOns?: IntakeAddOns;
 }

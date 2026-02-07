@@ -4,7 +4,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { RacquetJob } from '@/types';
+import { RacquetJob, StatusEvent } from '@/types';
 import { format, parseISO } from 'date-fns';
 import { CheckCircle2, Circle, Clock } from 'lucide-react';
 
@@ -17,38 +17,103 @@ interface TimelineDrawerProps {
 interface TimelineEvent {
   label: string;
   date: string | null;
+  staffName?: string | null;
   completed: boolean;
   current: boolean;
 }
 
-const statusOrder = [
-  'received',
-  'ready-for-stringing',
-  'received-by-stringer',
-  'complete',
-  'waiting-pickup',
-  'delivered',
+const CANONICAL_STEPS = [
+  { key: 'received_front_desk', label: 'Received by Front Desk' },
+  { key: 'ready_for_stringing', label: 'Ready for Stringing' },
+  { key: 'received_by_stringer', label: 'Received by Stringer' },
+  { key: 'completed', label: 'Completed / Ready for Pickup' },
+  { key: 'waiting_pickup', label: 'Waiting Pickup' },
+  { key: 'pickup_completed', label: 'Pickup Completed' },
 ] as const;
 
-// Map legacy statuses to new ones for timeline position
-function resolveStatus(status: string | null): string {
-  if (status === 'processing') return 'received';
-  if (status === 'in-progress') return 'received-by-stringer';
-  return status || 'received';
+const EXTRA_EVENTS = [
+  { key: 'mark_paid', label: 'Payment Marked Paid' },
+] as const;
+
+function formatDate(d: string | null): string | null {
+  if (!d) return null;
+  try {
+    return format(parseISO(d), 'MMM d, yyyy h:mm a');
+  } catch {
+    return d;
+  }
 }
 
-function getTimelineEvents(racquet: RacquetJob): TimelineEvent[] {
+function getTimelineEventsFromStatusEvents(racquet: RacquetJob): TimelineEvent[] | null {
+  const events = racquet.status_events;
+  if (!events || events.length === 0) return null;
+
+  const sorted = [...events].sort((a: StatusEvent, b: StatusEvent) => {
+    const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return aTime - bTime;
+  });
+
+  // Map earliest occurrence for each event_type (or latest if desired)
+  const byType = new Map<string, StatusEvent>();
+  for (const ev of sorted) byType.set(ev.event_type, ev);
+
+  // Canonical steps first
+  const stepEvents: TimelineEvent[] = CANONICAL_STEPS.map((s) => {
+    // accept both snake_case and kebab variants
+    const ev =
+      byType.get(s.key) ||
+      byType.get(s.key.replace(/_/g, '-')) ||
+      null;
+
+    return {
+      label: s.label,
+      date: ev ? formatDate(ev.created_at) : null,
+      staffName: ev?.staff_name ?? null,
+      completed: !!ev,
+      current: false,
+    };
+  });
+
+  // Determine current = first incomplete step (or last if all complete)
+  const firstIncompleteIdx = stepEvents.findIndex((e) => !e.completed);
+  const currentIdx = firstIncompleteIdx === -1 ? stepEvents.length - 1 : firstIncompleteIdx;
+  stepEvents[currentIdx].current = true;
+
+  // Optional: show payment marker as an extra row (not a process step)
+  const extra: TimelineEvent[] = EXTRA_EVENTS.map((s) => {
+    const ev = byType.get(s.key);
+    return {
+      label: s.label,
+      date: ev ? formatDate(ev.created_at) : null,
+      staffName: ev?.staff_name ?? null,
+      completed: !!ev,
+      current: false,
+    };
+  }).filter((e) => e.completed);
+
+  return [...stepEvents, ...extra];
+}
+
+function getSyntheticTimelineEvents(racquet: RacquetJob): TimelineEvent[] {
+  // legacy synthetic behavior (unchanged structure)
+  const statusOrder = [
+    'received',
+    'ready-for-stringing',
+    'received-by-stringer',
+    'complete',
+    'waiting-pickup',
+    'delivered',
+  ] as const;
+
+  const resolveStatus = (status: string | null): string => {
+    if (status === 'processing') return 'received';
+    if (status === 'in-progress') return 'received-by-stringer';
+    return status || 'received';
+  };
+
   const resolved = resolveStatus(racquet.status);
   const currentIdx = statusOrder.indexOf(resolved as any);
-
-  const formatDate = (d: string | null) => {
-    if (!d) return null;
-    try {
-      return format(parseISO(d), 'MMM d, yyyy');
-    } catch {
-      return d;
-    }
-  };
 
   return [
     {
@@ -93,7 +158,8 @@ function getTimelineEvents(racquet: RacquetJob): TimelineEvent[] {
 export function TimelineDrawer({ open, onOpenChange, racquet }: TimelineDrawerProps) {
   if (!racquet) return null;
 
-  const events = getTimelineEvents(racquet);
+  const eventsFromStatus = getTimelineEventsFromStatusEvents(racquet);
+  const events = eventsFromStatus ?? getSyntheticTimelineEvents(racquet);
   const isCancelled = racquet.status === 'cancelled';
 
   return (
@@ -121,10 +187,10 @@ export function TimelineDrawer({ open, onOpenChange, racquet }: TimelineDrawerPr
                 <div key={i} className="relative flex items-start gap-3">
                   {/* Icon */}
                   <div className="absolute -left-8 mt-0.5">
-                    {event.completed ? (
-                      <CheckCircle2 className="w-[22px] h-[22px] text-primary bg-card rounded-full" />
-                    ) : event.current ? (
+                    {event.current ? (
                       <Clock className="w-[22px] h-[22px] text-status-pending bg-card rounded-full" />
+                    ) : event.completed ? (
+                      <CheckCircle2 className="w-[22px] h-[22px] text-primary bg-card rounded-full" />
                     ) : (
                       <Circle className="w-[22px] h-[22px] text-muted-foreground/30 bg-card rounded-full" />
                     )}
@@ -135,7 +201,10 @@ export function TimelineDrawer({ open, onOpenChange, racquet }: TimelineDrawerPr
                       {event.label}
                     </p>
                     {event.date && (
-                      <p className="text-xs text-muted-foreground">{event.date}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {event.date}
+                        {event.staffName ? ` \u2014 ${event.staffName}` : ''}
+                      </p>
                     )}
                   </div>
                 </div>
