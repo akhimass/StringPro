@@ -17,15 +17,10 @@ export type Database = {
       racquet_jobs: {
         Row: {
           created_at: string | null
-          amount_due: number
           drop_in_date: string
           email: string | null
           id: string
           member_name: string
-          ticket_number: string | null
-          paid_at: string | null
-          paid_by_staff: string | null
-          payment_status: string
           phone: string
           pickup_deadline: string | null
           racquet_type: string | null
@@ -41,15 +36,10 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
-          amount_due?: number
           drop_in_date: string
           email?: string | null
           id?: string
           member_name: string
-          ticket_number?: string | null
-          paid_at?: string | null
-          paid_by_staff?: string | null
-          payment_status?: string
           phone: string
           pickup_deadline?: string | null
           racquet_type?: string | null
@@ -65,15 +55,10 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
-          amount_due?: number
           drop_in_date?: string
           email?: string | null
           id?: string
           member_name?: string
-          ticket_number?: string | null
-          paid_at?: string | null
-          paid_by_staff?: string | null
-          payment_status?: string
           phone?: string
           pickup_deadline?: string | null
           racquet_type?: string | null
@@ -104,7 +89,6 @@ export type Database = {
           created_at: string | null
           gauge: string | null
           id: string
-          price: number
           name: string
         }
         Insert: {
@@ -113,7 +97,6 @@ export type Database = {
           created_at?: string | null
           gauge?: string | null
           id?: string
-          price?: number
           name: string
         }
         Update: {
@@ -121,43 +104,10 @@ export type Database = {
           brand?: string | null
           created_at?: string | null
           gauge?: string | null
-          price?: number
           id?: string
           name?: string
         }
         Relationships: []
-      }
-      status_events: {
-        Row: {
-          id: string
-          job_id: string
-          event_type: string
-          staff_name: string | null
-          created_at: string | null
-        }
-        Insert: {
-          id?: string
-          job_id: string
-          event_type: string
-          staff_name?: string | null
-          created_at?: string | null
-        }
-        Update: {
-          id?: string
-          job_id?: string
-          event_type?: string
-          staff_name?: string | null
-          created_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "status_events_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "racquet_jobs"
-            referencedColumns: ["id"]
-          }
-        ]
       }
     }
     Views: {
