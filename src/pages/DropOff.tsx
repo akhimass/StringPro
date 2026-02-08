@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { normalizeUSPhone, isValidEmail } from '@/lib/validation';
 import { fetchStrings, createRacquet } from '@/lib/api';
+import { uploadJobPhotos } from '@/lib/attachments';
 import { RacquetFormData, IntakeAddOns } from '@/types';
 import { Header } from '@/components/Header';
 import { RequiredLabel } from '@/components/RequiredLabel';
@@ -13,6 +14,7 @@ import { WaiverSection } from '@/components/WaiverSection';
 import { VerificationInput } from '@/components/VerificationInput';
 import { IntakeAddOnsSection } from '@/components/dropoff/IntakeAddOns';
 import { DropOffConfirmation } from '@/components/dropoff/DropOffConfirmation';
+import { PhotoUploadSection } from '@/components/dropoff/PhotoUploadSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -63,6 +65,7 @@ export default function DropOff() {
   const [submitted, setSubmitted] = useState(false);
   const [submittedTicket, setSubmittedTicket] = useState('');
   const [submittedAmountDue, setSubmittedAmountDue] = useState<number | null>(null);
+  const [intakePhotos, setIntakePhotos] = useState<File[]>([]);
   const queryClient = useQueryClient();
 
   // Add-ons state
@@ -119,7 +122,23 @@ export default function DropOff() {
   });
 
   const mutation = useMutation({
-    mutationFn: (data: RacquetFormData) => createRacquet(data),
+    mutationFn: async (data: RacquetFormData) => {
+      const job = await createRacquet(data);
+
+      // Upload intake photos (non-blocking — job is already created)
+      if (intakePhotos.length > 0) {
+        try {
+          const { errors } = await uploadJobPhotos(job.id, 'intake', intakePhotos);
+          if (errors.length > 0) {
+            toast.warning(`${errors.length} photo(s) failed to upload. Staff can add them later.`);
+          }
+        } catch {
+          toast.warning('Photo upload failed. Staff can add them later from Admin.');
+        }
+      }
+
+      return job;
+    },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['racquets'] });
       const ticket = res.ticket_number || '';
@@ -184,6 +203,7 @@ export default function DropOff() {
       stencilRequest: '',
       gripAddOn: false,
     });
+    setIntakePhotos([]);
     setSubmitted(false);
     setSubmittedTicket('');
   };
@@ -404,6 +424,9 @@ export default function DropOff() {
                   )}
                 </div>
               </div>
+
+              {/* Photo Upload */}
+              <PhotoUploadSection files={intakePhotos} onChange={setIntakePhotos} />
 
               {/* Additional Services */}
               <IntakeAddOnsSection addOns={addOns} onChange={setAddOns} />
