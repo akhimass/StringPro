@@ -4,7 +4,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { RacquetJob, StatusEvent } from '@/types';
+import { RacquetJob, StatusEvent, PaymentEvent } from '@/types';
 import { format, parseISO } from 'date-fns';
 import { CheckCircle2, Circle, Clock } from 'lucide-react';
 
@@ -20,19 +20,25 @@ interface TimelineEvent {
   staffName?: string | null;
   completed: boolean;
   current: boolean;
+  /** For payment_events */
+  amount?: number | null;
+  paymentMethod?: string | null;
+  sortKey?: number; // for merge-sort by timestamp (merged timeline)
 }
 
 const CANONICAL_STEPS = [
   { key: 'received_front_desk', label: 'Received by Front Desk' },
   { key: 'ready_for_stringing', label: 'Ready for Stringing' },
   { key: 'received_by_stringer', label: 'Received by Stringer' },
-  { key: 'completed', label: 'Completed / Ready for Pickup' },
+  { key: 'completed_ready_for_pickup', label: 'Completed / Ready for Pickup' },
   { key: 'waiting_pickup', label: 'Waiting Pickup' },
   { key: 'pickup_completed', label: 'Pickup Completed' },
 ] as const;
 
 const EXTRA_EVENTS = [
   { key: 'mark_paid', label: 'Payment Marked Paid' },
+  { key: 'payment_recorded', label: 'Payment Recorded' },
+  { key: 'created', label: 'Order Created' },
 ] as const;
 
 function formatDate(d: string | null): string | null {
@@ -44,55 +50,83 @@ function formatDate(d: string | null): string | null {
   }
 }
 
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  received_front_desk: 'Received by Front Desk',
+  ready_for_stringing: 'Ready for Stringing',
+  received_by_stringer: 'Received by Stringer',
+  completed_ready_for_pickup: 'Completed / Ready for Pickup',
+  completed: 'Completed / Ready for Pickup',
+  waiting_pickup: 'Waiting Pickup',
+  pickup_completed: 'Pickup Completed',
+  mark_paid: 'Payment Marked Paid',
+  payment_recorded: 'Payment Recorded',
+  created: 'Order Created',
+};
+
+/** Build merged timeline from status_events + payment_events, sorted by timestamp. */
+function getMergedTimelineEvents(racquet: RacquetJob): TimelineEvent[] {
+  const items: TimelineEvent[] = [];
+  const statusEvents = racquet.status_events ?? [];
+  const paymentEvents = racquet.payment_events ?? [];
+
+  for (const ev of statusEvents) {
+    const label = EVENT_TYPE_LABELS[ev.event_type] ?? ev.event_type.replace(/_/g, ' ');
+    const createdAt = ev.created_at ? new Date(ev.created_at).getTime() : 0;
+    items.push({
+      label,
+      date: formatDate(ev.created_at),
+      staffName: ev.staff_name ?? null,
+      completed: true,
+      current: false,
+      sortKey: createdAt,
+    });
+  }
+
+  for (const pe of paymentEvents as PaymentEvent[]) {
+    const createdAt = pe.created_at ? new Date(pe.created_at).getTime() : 0;
+    const amount = typeof pe.amount === 'number' ? pe.amount : Number(pe.amount);
+    const method = pe.payment_method ?? null;
+    items.push({
+      label: 'Payment Recorded',
+      date: formatDate(pe.created_at),
+      staffName: pe.staff_name ?? null,
+      completed: true,
+      current: false,
+      amount: Number.isFinite(amount) ? amount : null,
+      paymentMethod: method,
+      sortKey: createdAt,
+    });
+  }
+
+  items.sort((a, b) => a.sortKey - b.sortKey);
+
+  // Mark current = first incomplete canonical step (by latest status), or last item
+  const stepKeys = CANONICAL_STEPS.map((s) => s.key);
+  const lastStepIndex = stepKeys.reduce((idx, key, i) => {
+    const hasEvent = statusEvents.some(
+      (e) => e.event_type === key || (key === 'completed_ready_for_pickup' && e.event_type === 'completed')
+    );
+    return hasEvent ? i : idx;
+  }, -1);
+  const currentStepIdx = lastStepIndex + 1;
+  const currentLabel =
+    currentStepIdx < CANONICAL_STEPS.length
+      ? CANONICAL_STEPS[currentStepIdx].label
+      : items.length ? items[items.length - 1].label : null;
+  for (let i = 0; i < items.length; i++) {
+    items[i].current = !!currentLabel && items[i].label === currentLabel && i === items.length - 1;
+  }
+  if (items.length && !items.some((e) => e.current)) items[items.length - 1].current = true;
+
+  return items;
+}
+
 function getTimelineEventsFromStatusEvents(racquet: RacquetJob): TimelineEvent[] | null {
   const events = racquet.status_events;
-  if (!events || events.length === 0) return null;
+  const hasPaymentEvents = racquet.payment_events && racquet.payment_events.length > 0;
+  if ((!events || events.length === 0) && !hasPaymentEvents) return null;
 
-  const sorted = [...events].sort((a: StatusEvent, b: StatusEvent) => {
-    const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
-    const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
-    return aTime - bTime;
-  });
-
-  // Map earliest occurrence for each event_type (or latest if desired)
-  const byType = new Map<string, StatusEvent>();
-  for (const ev of sorted) byType.set(ev.event_type, ev);
-
-  // Canonical steps first
-  const stepEvents: TimelineEvent[] = CANONICAL_STEPS.map((s) => {
-    // accept both snake_case and kebab variants
-    const ev =
-      byType.get(s.key) ||
-      byType.get(s.key.replace(/_/g, '-')) ||
-      null;
-
-    return {
-      label: s.label,
-      date: ev ? formatDate(ev.created_at) : null,
-      staffName: ev?.staff_name ?? null,
-      completed: !!ev,
-      current: false,
-    };
-  });
-
-  // Determine current = first incomplete step (or last if all complete)
-  const firstIncompleteIdx = stepEvents.findIndex((e) => !e.completed);
-  const currentIdx = firstIncompleteIdx === -1 ? stepEvents.length - 1 : firstIncompleteIdx;
-  stepEvents[currentIdx].current = true;
-
-  // Optional: show payment marker as an extra row (not a process step)
-  const extra: TimelineEvent[] = EXTRA_EVENTS.map((s) => {
-    const ev = byType.get(s.key);
-    return {
-      label: s.label,
-      date: ev ? formatDate(ev.created_at) : null,
-      staffName: ev?.staff_name ?? null,
-      completed: !!ev,
-      current: false,
-    };
-  }).filter((e) => e.completed);
-
-  return [...stepEvents, ...extra];
+  return getMergedTimelineEvents(racquet);
 }
 
 function getSyntheticTimelineEvents(racquet: RacquetJob): TimelineEvent[] {
@@ -199,6 +233,12 @@ export function TimelineDrawer({ open, onOpenChange, racquet }: TimelineDrawerPr
                   <div>
                     <p className={`text-sm font-medium ${event.completed ? 'text-foreground' : 'text-muted-foreground/50'}`}>
                       {event.label}
+                      {event.amount != null && Number.isFinite(event.amount) && (
+                        <span className="text-muted-foreground font-normal ml-1">
+                          (${Number(event.amount).toFixed(2)}
+                          {event.paymentMethod ? ` · ${event.paymentMethod}` : ''})
+                        </span>
+                      )}
                     </p>
                     {event.date && (
                       <p className="text-xs text-muted-foreground">

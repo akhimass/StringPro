@@ -151,7 +151,7 @@ export function PickupCompleteDialog({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={!paymentVerified || !signature.trim()}
+            disabled={!paymentVerified || !staffName.trim() || !signature.trim()}
           >
             Complete Pickup
           </Button>

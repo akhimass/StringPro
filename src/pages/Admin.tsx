@@ -10,7 +10,7 @@ import {
   updateString,
   deleteString,
   markReceivedByFrontDesk,
-  markPaid,
+  recordPayment,
   markPickupCompleted,
 } from '@/lib/api';
 import { RacquetStatus, StringOption, RacquetJob } from '@/types';
@@ -20,7 +20,7 @@ import { DueStatusBadge } from '@/components/DueStatusBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { TimelineDrawer } from '@/components/TimelineDrawer';
 import { PaymentStatusBadge } from '@/components/admin/PaymentStatusBadge';
-import { MarkAsPaidDialog } from '@/components/admin/MarkAsPaidDialog';
+import { RecordPaymentDialog } from '@/components/admin/RecordPaymentDialog';
 import { FrontDeskReceiveDialog } from '@/components/admin/FrontDeskReceiveDialog';
 import { PickupCompleteDialog } from '@/components/admin/PickupCompleteDialog';
 import { format, parseISO } from 'date-fns';
@@ -106,18 +106,29 @@ export default function Admin() {
   const [pickupDialogOpen, setPickupDialogOpen] = useState(false);
   const [pickupRacquet, setPickupRacquet] = useState<RacquetJob | null>(null);
 
-  // Mutations for payment helpers
-  const markPaidMutation = useMutation({
-    mutationFn: ({ id, staffName }: { id: string; staffName: string }) => markPaid(id, staffName),
-    onSuccess: () => {
+  // Record payment (full or partial)
+  const recordPaymentMutation = useMutation({
+    mutationFn: ({
+      id,
+      amount,
+      staffName,
+      paymentMethod,
+    }: {
+      id: string;
+      amount: number;
+      staffName: string;
+      paymentMethod?: string | null;
+    }) => recordPayment(id, amount, staffName, paymentMethod),
+    onSuccess: (_, v) => {
       queryClient.invalidateQueries({ queryKey: ['racquets'] });
-      toast.success('Payment marked as paid');
+      toast.success(
+        v.amount > 0
+          ? `Payment of $${v.amount.toFixed(2)} recorded`
+          : 'Payment recorded'
+      );
     },
     onError: (err: Error) => {
-      const msg = err?.message ?? 'Failed to mark payment as paid';
-      toast.error(msg);
-      // eslint-disable-next-line no-console
-      console.error('markPaid failed', err);
+      toast.error(err?.message ?? 'Failed to record payment');
     },
   });
 
@@ -256,11 +267,20 @@ export default function Admin() {
     setSearchParams({ tab: value });
   };
 
-  // Payment handlers
-  const handleMarkAsPaid = (staffName: string) => {
+  // Payment handler (Record Payment dialog)
+  const handleRecordPayment = (
+    amount: number,
+    staffName: string,
+    paymentMethod?: string | null
+  ) => {
     if (!payRacquet) return;
-    markPaidMutation.mutate(
-      { id: payRacquet.id, staffName },
+    recordPaymentMutation.mutate(
+      {
+        id: payRacquet.id,
+        amount,
+        staffName,
+        paymentMethod,
+      },
       {
         onSuccess: () => {
           setPayDialogOpen(false);
@@ -288,11 +308,14 @@ export default function Admin() {
     }
   };
 
-  // Pickup complete handler
+  // Pickup complete handler (block if not fully paid)
   const handlePickupComplete = (data: { paymentVerified: boolean; staffName: string; signature: string; notes: string }) => {
     if (pickupRacquet) {
-      if (pickupRacquet.payment_status !== 'paid') {
-        toast.error('Cannot complete pickup for unpaid job. Please mark as paid first.');
+      const due = Number(pickupRacquet.amount_due) || 0;
+      const paid = Number(pickupRacquet.amount_paid) || 0;
+      if (paid < due) {
+        const remaining = (due - paid).toFixed(2);
+        toast.error(`Cannot complete pickup. Remaining balance: $${remaining}`);
         return;
       }
 
@@ -301,9 +324,8 @@ export default function Admin() {
           queryClient.invalidateQueries({ queryKey: ['racquets'] });
           toast.success(`Pickup completed — signed by ${data.signature}`);
         })
-        .catch((err) => {
-          console.error(err);
-          toast.error('Failed to complete pickup');
+        .catch((err: Error) => {
+          toast.error(err?.message ?? 'Failed to complete pickup');
         })
         .finally(() => {
           setPickupDialogOpen(false);
@@ -420,7 +442,11 @@ export default function Admin() {
                     </TableHeader>
                     <TableBody>
                       {filteredRacquets.map((racquet) => {
-                        const isPaid = racquet.payment_status === 'paid';
+                        const amountDue = Number(racquet.amount_due) || 0;
+                        const amountPaid = Number(racquet.amount_paid) || 0;
+                        const balanceDue = Math.max(0, amountDue - amountPaid);
+                        const isFullyPaid = amountPaid >= amountDue;
+                        const canRecordPayment = balanceDue > 0;
                         return (
                           <TableRow key={racquet.id} className="group">
                             <TableCell className="font-mono text-sm font-medium whitespace-nowrap">
@@ -464,7 +490,16 @@ export default function Admin() {
                             </TableCell>
                             {/* Payment Status */}
                             <TableCell>
-                              <PaymentStatusBadge paid={isPaid} />
+                              <div className="flex flex-col gap-0.5">
+                                <PaymentStatusBadge
+                                  paymentStatus={racquet.payment_status as 'unpaid' | 'partial' | 'paid'}
+                                />
+                                {!isFullyPaid && balanceDue > 0 && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    ${balanceDue.toFixed(2)} left
+                                  </span>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell>
                               {racquet.status ? (
@@ -503,12 +538,12 @@ export default function Admin() {
                                   <ClipboardCheck className="w-4 h-4" />
                                 </Button>
 
-                                {/* Mark as Paid */}
-                                {!isPaid && (
+                                {/* Record Payment (unpaid or partial) */}
+                                {canRecordPayment && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    title="Mark as paid"
+                                    title="Record payment"
                                     onClick={() => {
                                       setPayRacquet(racquet);
                                       setPayDialogOpen(true);
@@ -538,17 +573,30 @@ export default function Admin() {
                                   </SelectContent>
                                 </Select>
 
-                                {/* Pickup Complete */}
+                                {/* Pickup Complete (disabled if not fully paid) */}
                                 {racquet.status !== 'delivered' && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    title="Complete pickup"
+                                    title={
+                                      isFullyPaid
+                                        ? 'Complete pickup'
+                                        : `Remaining balance: $${balanceDue.toFixed(2)}`
+                                    }
                                     onClick={() => {
+                                      if (!isFullyPaid) {
+                                        toast.error(`Pay remaining $${balanceDue.toFixed(2)} before pickup`);
+                                        return;
+                                      }
                                       setPickupRacquet(racquet);
                                       setPickupDialogOpen(true);
                                     }}
-                                    className="opacity-60 group-hover:opacity-100"
+                                    className={
+                                      isFullyPaid
+                                        ? 'opacity-60 group-hover:opacity-100'
+                                        : 'opacity-40 cursor-not-allowed'
+                                    }
+                                    disabled={!isFullyPaid}
                                   >
                                     <Package className="w-4 h-4" />
                                   </Button>
@@ -768,13 +816,12 @@ export default function Admin() {
           racquet={timelineRacquet}
         />
 
-        {/* Mark as Paid Dialog */}
-        <MarkAsPaidDialog
+        {/* Record Payment Dialog (full or partial) */}
+        <RecordPaymentDialog
           open={payDialogOpen}
           onOpenChange={setPayDialogOpen}
           racquet={payRacquet}
-          amountDue={payRacquet?.amount_due ?? 0}
-          onConfirm={handleMarkAsPaid}
+          onConfirm={handleRecordPayment}
         />
 
         {/* Front Desk Receive Dialog */}

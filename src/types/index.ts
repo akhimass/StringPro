@@ -22,7 +22,8 @@ export interface RacquetJob {
   terms_accepted_at: string | null;
   status: RacquetStatus | null;
   amount_due?: number | null;
-  payment_status?: 'unpaid' | 'paid';
+  amount_paid?: number | null;
+  payment_status?: 'unpaid' | 'partial' | 'paid';
   paid_at?: string | null;
   paid_by_staff?: string | null;
    ticket_number?: string | null;
@@ -34,6 +35,7 @@ export interface RacquetJob {
   // Joined data
   strings?: StringOption | null;
   status_events?: StatusEvent[] | null;
+  payment_events?: PaymentEvent[] | null;
 }
 
 export interface StatusEvent {
@@ -41,6 +43,15 @@ export interface StatusEvent {
   job_id: string;
   event_type: string;
   staff_name: string | null;
+  created_at: string | null;
+}
+
+export interface PaymentEvent {
+  id: string;
+  job_id: string;
+  amount: number;
+  payment_method: string | null;
+  staff_name: string;
   created_at: string | null;
 }
 

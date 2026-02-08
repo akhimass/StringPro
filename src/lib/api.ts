@@ -52,7 +52,8 @@ export const fetchRacquets = async (): Promise<RacquetJob[]> => {
     .select(`
       *,
       strings (*),
-      status_events (*)
+      status_events (*),
+      payment_events (*)
     `)
     .order('created_at', { ascending: false });
 
@@ -138,27 +139,59 @@ export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJ
   const { data, error } = await supabase
     .from('racquet_jobs')
     .insert(insertData)
-    .select(`
-      *,
-      strings (*)
-    `)
+    .select(`*, strings (*)`)
     .single();
-  
+
   if (error) throw error;
-  return data as RacquetJob;
+  const job = data as RacquetJob;
+
+  try {
+    await supabase.from('status_events').insert({
+      job_id: job.id,
+      event_type: 'created',
+      staff_name: null,
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to insert status_event (created)', err);
+  }
+
+  return job;
+};
+
+const STATUS_TO_EVENT_TYPE: Record<RacquetStatus, string> = {
+  'processing': 'created',
+  'received': 'received_front_desk',
+  'ready-for-stringing': 'ready_for_stringing',
+  'received-by-stringer': 'received_by_stringer',
+  'complete': 'completed_ready_for_pickup',
+  'waiting-pickup': 'waiting_pickup',
+  'delivered': 'pickup_completed',
+  'cancelled': 'cancelled',
+  'in-progress': 'received_by_stringer',
 };
 
 export const updateRacquetStatus = async (id: string, status: RacquetStatus): Promise<RacquetJob> => {
+  const eventType = STATUS_TO_EVENT_TYPE[status] ?? status;
+
+  try {
+    await supabase.from('status_events').insert({
+      job_id: id,
+      event_type: eventType,
+      staff_name: null,
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to insert status_event', err);
+  }
+
   const { data, error } = await supabase
     .from('racquet_jobs')
     .update({ status })
     .eq('id', id)
-    .select(`
-      *,
-      strings (*)
-    `)
+    .select(`*, strings (*)`)
     .single();
-  
+
   if (error) throw error;
   return data as RacquetJob;
 };
@@ -185,41 +218,91 @@ export const markReceivedByFrontDesk = async (
   return updateRacquetStatus(id, 'received');
 };
 
-export const markPaid = async (
+/** Derive payment_status from amount_paid and amount_due */
+function derivePaymentStatus(amountPaid: number, amountDue: number): 'unpaid' | 'partial' | 'paid' {
+  if (amountPaid >= amountDue) return 'paid';
+  if (amountPaid > 0) return 'partial';
+  return 'unpaid';
+}
+
+/**
+ * Record a payment (full or partial). Inserts payment_events, updates racquet_jobs amount_paid and payment_status.
+ * Clamps amount to remaining balance; requires amount > 0.
+ */
+export const recordPayment = async (
   id: string,
-  staffName: string
+  amount: number,
+  staffName: string,
+  paymentMethod?: string | null
 ): Promise<RacquetJob> => {
-  // Update payment first (source of truth); then log status_event
+  if (!(amount > 0)) throw new Error('Payment amount must be greater than 0');
+
+  const { data: job, error: fetchError } = await supabase
+    .from('racquet_jobs')
+    .select('id, amount_due, amount_paid')
+    .eq('id', id)
+    .single();
+
+  if (fetchError || !job) throw fetchError || new Error('Job not found');
+
+  const amountDueVal = Number(job.amount_due) || 0;
+  const currentPaid = Number(job.amount_paid) || 0;
+  const balanceDue = Math.max(0, amountDueVal - currentPaid);
+
+  const clampedAmount = balanceDue <= 0 ? 0 : Math.min(amount, balanceDue);
+  if (clampedAmount <= 0) throw new Error('Job is already paid in full');
+
+  const newAmountPaid = currentPaid + clampedAmount;
+  const paymentStatus = derivePaymentStatus(newAmountPaid, amountDueVal);
+
+  const { error: insertPayError } = await supabase.from('payment_events').insert({
+    job_id: id,
+    amount: clampedAmount,
+    payment_method: paymentMethod || null,
+    staff_name: staffName,
+  });
+  if (insertPayError) throw insertPayError;
+
   const { data, error } = await supabase
     .from('racquet_jobs')
     .update({
-      payment_status: 'paid',
+      amount_paid: newAmountPaid,
+      payment_status: paymentStatus,
       paid_at: new Date().toISOString(),
       paid_by_staff: staffName,
     })
     .eq('id', id)
-    .select(`
-      *,
-      strings (*)
-    `)
+    .select(`*, strings (*), status_events (*), payment_events (*)`)
     .single();
 
   if (error) throw error;
   if (!data) throw new Error('Update returned no row');
 
-  // Log status_event for audit (non-fatal)
   try {
     await supabase.from('status_events').insert({
       job_id: id,
-      event_type: 'mark_paid',
+      event_type: 'payment_recorded',
       staff_name: staffName,
     });
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error('Failed to insert status_event (mark_paid)', err);
+    console.error('Failed to insert status_event (payment_recorded)', err);
   }
 
   return data as RacquetJob;
+};
+
+/** Pay in full: record payment for remaining balance. Convenience wrapper. */
+export const markPaid = async (id: string, staffName: string): Promise<RacquetJob> => {
+  const { data: job, error: fetchError } = await supabase
+    .from('racquet_jobs')
+    .select('amount_due, amount_paid')
+    .eq('id', id)
+    .single();
+  if (fetchError || !job) throw fetchError || new Error('Job not found');
+  const balance = Math.max(0, Number(job.amount_due) - Number(job.amount_paid));
+  if (balance <= 0) throw new Error('Job is already paid in full');
+  return recordPayment(id, balance, staffName);
 };
 
 export const markPickupCompleted = async (
@@ -230,7 +313,7 @@ export const markPickupCompleted = async (
   // Ensure job is paid before allowing pickup completion
   const { data: job, error: fetchError } = await supabase
     .from('racquet_jobs')
-    .select('id, payment_status')
+    .select('id, payment_status, amount_due, amount_paid')
     .eq('id', id)
     .single();
 
@@ -238,8 +321,10 @@ export const markPickupCompleted = async (
     throw fetchError || new Error('Job not found');
   }
 
-  if (job.payment_status !== 'paid') {
-    throw new Error('Cannot complete pickup for unpaid job');
+  const amountDue = Number(job.amount_due) ?? 0;
+  const amountPaid = Number((job as { amount_paid?: number }).amount_paid) ?? 0;
+  if (amountPaid < amountDue) {
+    throw new Error(`Cannot complete pickup: remaining balance $${(amountDue - amountPaid).toFixed(2)}`);
   }
 
   try {
