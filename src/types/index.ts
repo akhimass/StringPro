@@ -36,6 +36,17 @@ export interface RacquetJob {
   strings?: StringOption | null;
   status_events?: StatusEvent[] | null;
   payment_events?: PaymentEvent[] | null;
+  job_attachments?: JobAttachment[] | null;
+}
+
+export interface JobAttachment {
+  id: string;
+  job_id: string;
+  stage: 'intake' | 'completed' | 'issue';
+  url: string;
+  file_path: string;
+  uploaded_by_name: string | null;
+  created_at: string | null;
 }
 
 export interface StatusEvent {

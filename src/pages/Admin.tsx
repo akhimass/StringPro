@@ -23,6 +23,7 @@ import { PaymentStatusBadge } from '@/components/admin/PaymentStatusBadge';
 import { RecordPaymentDialog } from '@/components/admin/RecordPaymentDialog';
 import { FrontDeskReceiveDialog } from '@/components/admin/FrontDeskReceiveDialog';
 import { PickupCompleteDialog } from '@/components/admin/PickupCompleteDialog';
+import { AttachmentsDialog } from '@/components/admin/AttachmentsDialog';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -62,7 +63,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Package, Settings, Clock, AlertTriangle, ClipboardCheck, DollarSign } from 'lucide-react';
+import { Plus, Pencil, Trash2, Package, Settings, Clock, AlertTriangle, ClipboardCheck, DollarSign, Paperclip } from 'lucide-react';
 
 const statusOptions: { value: RacquetStatus; label: string }[] = [
   { value: 'received', label: 'Received by Front Desk' },
@@ -105,6 +106,10 @@ export default function Admin() {
   // Pickup complete dialog state
   const [pickupDialogOpen, setPickupDialogOpen] = useState(false);
   const [pickupRacquet, setPickupRacquet] = useState<RacquetJob | null>(null);
+
+  // Attachments dialog state
+  const [attachDialogOpen, setAttachDialogOpen] = useState(false);
+  const [attachRacquet, setAttachRacquet] = useState<RacquetJob | null>(null);
 
   // Record payment (full or partial)
   const recordPaymentMutation = useMutation({
@@ -510,6 +515,25 @@ export default function Admin() {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1">
+                                {/* Attachments */}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Attachments"
+                                  onClick={() => {
+                                    setAttachRacquet(racquet);
+                                    setAttachDialogOpen(true);
+                                  }}
+                                  className="opacity-60 group-hover:opacity-100 relative"
+                                >
+                                  <Paperclip className="w-4 h-4" />
+                                  {(racquet.job_attachments?.length ?? 0) > 0 && (
+                                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center">
+                                      {racquet.job_attachments!.length}
+                                    </span>
+                                  )}
+                                </Button>
+
                                 {/* Timeline */}
                                 <Button
                                   variant="ghost"
@@ -838,6 +862,13 @@ export default function Admin() {
           onOpenChange={setPickupDialogOpen}
           racquet={pickupRacquet}
           onConfirm={handlePickupComplete}
+        />
+
+        {/* Attachments Dialog */}
+        <AttachmentsDialog
+          open={attachDialogOpen}
+          onOpenChange={setAttachDialogOpen}
+          racquet={attachRacquet}
         />
       </main>
     </div>
