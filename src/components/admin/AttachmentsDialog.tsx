@@ -8,6 +8,8 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { RacquetJob } from '@/types';
 import { JobAttachment, fetchJobAttachments, uploadJobPhoto, deleteJobAttachment } from '@/lib/attachments';
 import { toast } from 'sonner';
@@ -26,6 +28,7 @@ export function AttachmentsDialog({ open, onOpenChange, racquet }: AttachmentsDi
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [completedStaffName, setCompletedStaffName] = useState('');
   const intakeInputRef = useRef<HTMLInputElement>(null);
   const completedInputRef = useRef<HTMLInputElement>(null);
 
@@ -57,11 +60,12 @@ export function AttachmentsDialog({ open, onOpenChange, racquet }: AttachmentsDi
 
     if (validFiles.length === 0) return;
 
+    const staffName = stage === 'completed' ? (completedStaffName.trim() || null) : null;
     setUploading(true);
     let successCount = 0;
     for (const file of validFiles.slice(0, 3)) {
       try {
-        await uploadJobPhoto(racquet.id, stage, file, 'Staff');
+        await uploadJobPhoto(racquet.id, stage, file, staffName);
         successCount++;
       } catch (err) {
         toast.error(`Failed to upload ${file.name}`);
@@ -78,10 +82,13 @@ export function AttachmentsDialog({ open, onOpenChange, racquet }: AttachmentsDi
 
   const handleDelete = async (attachment: JobAttachment) => {
     try {
-      await deleteJobAttachment(attachment);
+      const result = await deleteJobAttachment(attachment);
       queryClient.invalidateQueries({ queryKey: ['job-attachments', racquet?.id] });
       queryClient.invalidateQueries({ queryKey: ['racquets'] });
-      toast.success('Photo deleted');
+      toast.success('Photo removed');
+      if (result.storageFailed) {
+        toast.warning('Photo removed from list; file may still exist in storage.');
+      }
     } catch {
       toast.error('Failed to delete photo');
     }
@@ -147,6 +154,17 @@ export function AttachmentsDialog({ open, onOpenChange, racquet }: AttachmentsDi
                 onClickPhoto={setLightboxUrl}
                 onDelete={handleDelete}
               />
+              <div className="space-y-2">
+                <Label htmlFor="completedStaffName">Staff name (optional)</Label>
+                <Input
+                  id="completedStaffName"
+                  value={completedStaffName}
+                  onChange={(e) => setCompletedStaffName(e.target.value)}
+                  placeholder="Who is uploading"
+                  maxLength={100}
+                  className="max-w-xs"
+                />
+              </div>
               <input
                 ref={completedInputRef}
                 type="file"

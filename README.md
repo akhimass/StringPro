@@ -123,6 +123,8 @@ If the Supabase project is new, run the database setup SQL in **Supabase → SQL
 - Validation constraints (phone/email)
 - RLS policies
 
+**Storage (photo uploads):** You cannot create the bucket via SQL. In **Supabase Dashboard → Storage**, create a bucket named **`racquet-photos`** and set it to **Public** so drop-off and completed photos work. Upload paths are `jobs/<job_id>/intake/...` and `jobs/<job_id>/completed/...`.
+
 ---
 
 ## Supabase Backend Access (For Club Admins)

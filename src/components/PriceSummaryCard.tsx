@@ -9,12 +9,18 @@ interface PriceSummaryCardProps {
 const DEFAULT_BASE_FEE = 25;
 const RUSH_PRICES: Record<string, number> = { 'none': 0, '1-day': 10, '2-hour': 20 };
 const STRINGER_PRICES: Record<string, number> = { 'default': 0, 'stringer-a': 10 };
+const ADDON_FEE = 5; // grommet repair, grip replacement
+
 export function calculateTotal(addOns?: IntakeAddOns, basePrice?: number): number {
   const base = typeof basePrice === 'number' && basePrice > 0 ? basePrice : DEFAULT_BASE_FEE;
+  const grommet = addOns?.grommetRepair ? ADDON_FEE : 0;
+  const grip = addOns?.gripAddOn ? ADDON_FEE : 0;
   return (
     base +
-    (RUSH_PRICES[addOns.rushService] || 0) +
-    (STRINGER_PRICES[addOns.stringerOption] || 0)
+    (RUSH_PRICES[addOns?.rushService ?? 'none'] ?? 0) +
+    (STRINGER_PRICES[addOns?.stringerOption ?? 'default'] ?? 0) +
+    grommet +
+    grip
   );
 }
 
@@ -25,6 +31,8 @@ function formatPrice(amount: number): string {
 export function PriceSummaryCard({ stringName, addOns, basePriceCents }: PriceSummaryCardProps) {
   const rushCost = RUSH_PRICES[addOns?.rushService || 'none'] || 0;
   const stringerCost = STRINGER_PRICES[addOns?.stringerOption || 'default'] || 0;
+  const grommetCost = addOns?.grommetRepair ? ADDON_FEE : 0;
+  const gripCost = addOns?.gripAddOn ? ADDON_FEE : 0;
   const basePrice = typeof basePriceCents === 'number' ? basePriceCents / 100 : undefined;
   const total = calculateTotal(addOns, basePrice);
 
@@ -57,6 +65,18 @@ export function PriceSummaryCard({ stringName, addOns, basePriceCents }: PriceSu
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Stringer A</span>
             <span className="font-medium">+{formatPrice(stringerCost)}</span>
+          </div>
+        )}
+        {grommetCost > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Grommet repair</span>
+            <span className="font-medium">+{formatPrice(grommetCost)}</span>
+          </div>
+        )}
+        {gripCost > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Grip replacement</span>
+            <span className="font-medium">+{formatPrice(gripCost)}</span>
           </div>
         )}
         <div className="border-t border-border pt-3 flex items-center justify-between">

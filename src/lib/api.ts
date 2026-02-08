@@ -110,8 +110,10 @@ export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJ
     0;
 
   const stringerAFee = stringerOption === 'stringer-a' ? 10 : 0;
+  const grommetFee = addOns?.grommetRepair ? 5 : 0;
+  const gripFee = addOns?.gripAddOn ? 5 : 0;
 
-  const amountDue = BASE_FEE + rushFee + stringerAFee;
+  const amountDue = BASE_FEE + rushFee + stringerAFee + grommetFee + gripFee;
 
   const insertData = {
     member_name: formData.customerName,
@@ -346,6 +348,12 @@ export const deleteRacquet = async (id: string): Promise<void> => {
     .from('racquet_jobs')
     .delete()
     .eq('id', id);
-  
+
   if (error) throw error;
 };
+
+// Photo upload helpers (public bucket racquet-photos; paths jobs/<job_id>/intake|completed|issue/<uuid>.<ext>)
+export {
+  uploadJobPhoto,
+  uploadMultipleJobPhotos,
+} from '@/lib/attachments';

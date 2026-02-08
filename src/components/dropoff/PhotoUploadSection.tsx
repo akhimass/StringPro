@@ -1,6 +1,5 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { Camera, X, ImagePlus } from 'lucide-react';
 
 interface PhotoUploadSectionProps {
@@ -20,6 +19,14 @@ export function PhotoUploadSection({
 }: PhotoUploadSectionProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Create and revoke object URLs for previews; revoke on files change or unmount
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  useEffect(() => {
+    const urls = files.map((f) => URL.createObjectURL(f));
+    setPreviewUrls(urls);
+    return () => urls.forEach((url) => URL.revokeObjectURL(url));
+  }, [files]);
 
   const handleFilesSelected = (selectedFiles: FileList | null) => {
     if (!selectedFiles) return;
@@ -70,7 +77,7 @@ export function PhotoUploadSection({
               className="relative group w-20 h-20 rounded-md overflow-hidden border border-border bg-muted"
             >
               <img
-                src={URL.createObjectURL(file)}
+                src={previewUrls[index] ?? ''}
                 alt={`Upload ${index + 1}`}
                 className="w-full h-full object-cover"
               />

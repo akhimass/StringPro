@@ -109,6 +109,44 @@ export type Database = {
         }
         Relationships: []
       }
+      job_attachments: {
+        Row: {
+          id: string
+          job_id: string
+          stage: string
+          url: string
+          file_path: string
+          uploaded_by_name: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          job_id: string
+          stage: string
+          url: string
+          file_path: string
+          uploaded_by_name?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          job_id?: string
+          stage?: string
+          url?: string
+          file_path?: string
+          uploaded_by_name?: string | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_attachments_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "racquet_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

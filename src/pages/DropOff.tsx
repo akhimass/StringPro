@@ -4,8 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { normalizeUSPhone, isValidEmail } from '@/lib/validation';
-import { fetchStrings, createRacquet } from '@/lib/api';
-import { uploadJobPhotos } from '@/lib/attachments';
+import { fetchStrings, createRacquet, uploadMultipleJobPhotos } from '@/lib/api';
 import { RacquetFormData, IntakeAddOns } from '@/types';
 import { Header } from '@/components/Header';
 import { RequiredLabel } from '@/components/RequiredLabel';
@@ -128,7 +127,7 @@ export default function DropOff() {
       // Upload intake photos (non-blocking — job is already created)
       if (intakePhotos.length > 0) {
         try {
-          const { errors } = await uploadJobPhotos(job.id, 'intake', intakePhotos);
+          const { errors } = await uploadMultipleJobPhotos(job.id, 'intake', intakePhotos);
           if (errors.length > 0) {
             toast.warning(`${errors.length} photo(s) failed to upload. Staff can add them later.`);
           }
