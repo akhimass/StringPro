@@ -1,12 +1,44 @@
-import { RacquetStatus } from '@/types';
 import { cn } from '@/lib/utils';
 
 interface StatusBadgeProps {
-  status: RacquetStatus;
+  status: string | null;
 }
 
 const statusConfig: Record<string, { label: string; className: string }> = {
-  // New club statuses
+  // New canonical statuses
+  received_front_desk: {
+    label: 'Received by Front Desk',
+    className: 'bg-status-pending-bg text-status-pending',
+  },
+  ready_for_stringing: {
+    label: 'Ready for Stringing',
+    className: 'bg-status-progress-bg text-status-progress',
+  },
+  received_by_stringer: {
+    label: 'Received by Stringer',
+    className: 'bg-status-progress-bg text-status-progress',
+  },
+  stringing_completed: {
+    label: 'Stringing Completed',
+    className: 'bg-status-complete-bg text-status-complete',
+  },
+  ready_for_pickup: {
+    label: 'Ready for Pickup',
+    className: 'bg-status-complete-bg text-status-complete',
+  },
+  waiting_pickup: {
+    label: 'Waiting Pickup',
+    className: 'bg-amber-500/20 text-amber-400',
+  },
+  pickup_completed: {
+    label: 'Pickup Completed',
+    className: 'bg-green-100/10 text-green-400',
+  },
+  cancelled: {
+    label: 'Cancelled',
+    className: 'bg-status-cancelled-bg text-status-cancelled',
+  },
+  // Legacy mappings
   received: {
     label: 'Received by Front Desk',
     className: 'bg-status-pending-bg text-status-pending',
@@ -20,7 +52,7 @@ const statusConfig: Record<string, { label: string; className: string }> = {
     className: 'bg-status-progress-bg text-status-progress',
   },
   complete: {
-    label: 'Ready for Pickup',
+    label: 'Stringing Completed',
     className: 'bg-status-complete-bg text-status-complete',
   },
   'waiting-pickup': {
@@ -31,11 +63,6 @@ const statusConfig: Record<string, { label: string; className: string }> = {
     label: 'Pickup Completed',
     className: 'bg-green-100/10 text-green-400',
   },
-  cancelled: {
-    label: 'Cancelled',
-    className: 'bg-status-cancelled-bg text-status-cancelled',
-  },
-  // Legacy mappings
   processing: {
     label: 'Received by Front Desk',
     className: 'bg-status-pending-bg text-status-pending',
@@ -47,7 +74,7 @@ const statusConfig: Record<string, { label: string; className: string }> = {
 };
 
 export function StatusBadge({ status }: StatusBadgeProps) {
-  const config = statusConfig[status] || statusConfig.received;
+  const config = statusConfig[status ?? 'received'] || statusConfig.received;
 
   return (
     <span

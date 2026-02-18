@@ -36,7 +36,9 @@ export function Header() {
 
   const navItems = [
     { path: '/', label: 'Drop-Off' },
-    { path: '/admin', label: 'Admin' },
+    { path: '/admin', label: 'Manager' },
+    { path: '/stringer', label: 'Stringer' },
+    { path: '/frontdesk', label: 'Front Desk' },
   ];
 
   return (

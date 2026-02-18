@@ -14,8 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      message_templates: {
+        Row: {
+          body: string
+          created_at: string | null
+          id: string
+          label: string
+          subject: string | null
+          template_key: string
+          updated_at: string | null
+        }
+        Insert: {
+          body: string
+          created_at?: string | null
+          id?: string
+          label: string
+          subject?: string | null
+          template_key: string
+          updated_at?: string | null
+        }
+        Update: {
+          body?: string
+          created_at?: string | null
+          id?: string
+          label?: string
+          subject?: string | null
+          template_key?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       racquet_jobs: {
         Row: {
+          assigned_stringer: string | null
           created_at: string | null
           drop_in_date: string
           email: string | null
@@ -23,18 +54,25 @@ export type Database = {
           member_name: string
           phone: string
           pickup_deadline: string | null
+          racquet_max_tension_lbs: number | null
           racquet_type: string | null
+          ready_for_pickup_at: string | null
           reminder_2_sent: boolean | null
           reminder_3_sent: boolean | null
+          service_type: string
           status: string | null
           string_id: string | null
           string_power: string | null
           string_tension: number | null
+          tension_override_by: string | null
+          tension_override_lbs: number | null
+          tension_override_reason: string | null
           terms_accepted: boolean | null
           terms_accepted_at: string | null
           updated_at: string | null
         }
         Insert: {
+          assigned_stringer?: string | null
           created_at?: string | null
           drop_in_date: string
           email?: string | null
@@ -42,18 +80,25 @@ export type Database = {
           member_name: string
           phone: string
           pickup_deadline?: string | null
+          racquet_max_tension_lbs?: number | null
           racquet_type?: string | null
+          ready_for_pickup_at?: string | null
           reminder_2_sent?: boolean | null
           reminder_3_sent?: boolean | null
+          service_type?: string
           status?: string | null
           string_id?: string | null
           string_power?: string | null
           string_tension?: number | null
+          tension_override_by?: string | null
+          tension_override_lbs?: number | null
+          tension_override_reason?: string | null
           terms_accepted?: boolean | null
           terms_accepted_at?: string | null
           updated_at?: string | null
         }
         Update: {
+          assigned_stringer?: string | null
           created_at?: string | null
           drop_in_date?: string
           email?: string | null
@@ -61,13 +106,19 @@ export type Database = {
           member_name?: string
           phone?: string
           pickup_deadline?: string | null
+          racquet_max_tension_lbs?: number | null
           racquet_type?: string | null
+          ready_for_pickup_at?: string | null
           reminder_2_sent?: boolean | null
           reminder_3_sent?: boolean | null
+          service_type?: string
           status?: string | null
           string_id?: string | null
           string_power?: string | null
           string_tension?: number | null
+          tension_override_by?: string | null
+          tension_override_lbs?: number | null
+          tension_override_reason?: string | null
           terms_accepted?: boolean | null
           terms_accepted_at?: string | null
           updated_at?: string | null

@@ -115,6 +115,9 @@ export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJ
 
   const amountDue = BASE_FEE + rushFee + stringerAFee + grommetFee + gripFee;
 
+  const serviceType = addOns?.stringerOption === 'stringer-a' ? 'specialist' : 'default';
+  const assignedStringer = serviceType === 'specialist' ? 'A' : null;
+
   const insertData = {
     member_name: formData.customerName,
     phone,
@@ -132,6 +135,8 @@ export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJ
     payment_status: 'unpaid',
     terms_accepted: true,
     terms_accepted_at: new Date().toISOString(),
+    service_type: serviceType,
+    assigned_stringer: assignedStringer,
   };
 
   const { data, error } = await (supabase
@@ -156,14 +161,21 @@ export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJ
   return job;
 };
 
-const STATUS_TO_EVENT_TYPE: Record<RacquetStatus, string> = {
+const STATUS_TO_EVENT_TYPE: Record<string, string> = {
   'processing': 'created',
   'received': 'received_front_desk',
+  'received_front_desk': 'received_front_desk',
   'ready-for-stringing': 'ready_for_stringing',
+  'ready_for_stringing': 'ready_for_stringing',
   'received-by-stringer': 'received_by_stringer',
-  'complete': 'completed_ready_for_pickup',
+  'received_by_stringer': 'received_by_stringer',
+  'complete': 'stringing_completed',
+  'stringing_completed': 'stringing_completed',
+  'ready_for_pickup': 'ready_for_pickup',
   'waiting-pickup': 'waiting_pickup',
+  'waiting_pickup': 'waiting_pickup',
   'delivered': 'pickup_completed',
+  'pickup_completed': 'pickup_completed',
   'cancelled': 'cancelled',
   'in-progress': 'received_by_stringer',
 };
@@ -181,9 +193,16 @@ export const updateRacquetStatus = async (id: string, status: RacquetStatus): Pr
     console.error('Failed to insert status_event', err);
   }
 
+  // Set ready_for_pickup_at when transitioning to ready_for_pickup or equivalent
+  const isReadyForPickup = status === 'ready_for_pickup' || status === 'complete';
+  const updatePayload: any = { status };
+  if (isReadyForPickup) {
+    updatePayload.ready_for_pickup_at = new Date().toISOString();
+  }
+
   const { data, error } = await (supabase
     .from('racquet_jobs')
-    .update({ status } as any)
+    .update(updatePayload)
     .eq('id', id)
     .select(`*, strings (*)`)
     .single() as any);

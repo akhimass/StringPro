@@ -7,6 +7,7 @@ interface PhotoUploadSectionProps {
   onChange: (files: File[]) => void;
   maxFiles?: number;
   maxSizeMB?: number;
+  label?: string;
 }
 
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -16,6 +17,7 @@ export function PhotoUploadSection({
   onChange,
   maxFiles = 3,
   maxSizeMB = 5,
+  label = 'Photos (optional)',
 }: PhotoUploadSectionProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +63,7 @@ export function PhotoUploadSection({
     <div className="card-elevated p-6 space-y-4">
       <h2 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
         <Camera className="w-4 h-4" />
-        Photos (optional)
+        {label}
       </h2>
 
       <p className="text-xs text-muted-foreground">
