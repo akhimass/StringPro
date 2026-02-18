@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      job_attachments: {
+        Row: {
+          created_at: string | null
+          file_path: string
+          id: string
+          job_id: string
+          stage: string
+          uploaded_by_name: string | null
+          url: string
+        }
+        Insert: {
+          created_at?: string | null
+          file_path: string
+          id?: string
+          job_id: string
+          stage: string
+          uploaded_by_name?: string | null
+          url: string
+        }
+        Update: {
+          created_at?: string | null
+          file_path?: string
+          id?: string
+          job_id?: string
+          stage?: string
+          uploaded_by_name?: string | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_attachments_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "racquet_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       message_templates: {
         Row: {
           body: string
@@ -44,14 +82,54 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_events: {
+        Row: {
+          amount: number
+          created_at: string | null
+          id: string
+          job_id: string
+          payment_method: string | null
+          staff_name: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string | null
+          id?: string
+          job_id: string
+          payment_method?: string | null
+          staff_name: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          id?: string
+          job_id?: string
+          payment_method?: string | null
+          staff_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_events_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "racquet_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       racquet_jobs: {
         Row: {
+          amount_due: number | null
+          amount_paid: number | null
           assigned_stringer: string | null
           created_at: string | null
           drop_in_date: string
           email: string | null
           id: string
           member_name: string
+          paid_at: string | null
+          paid_by_staff: string | null
+          payment_status: string | null
           phone: string
           pickup_deadline: string | null
           racquet_max_tension_lbs: number | null
@@ -69,15 +147,21 @@ export type Database = {
           tension_override_reason: string | null
           terms_accepted: boolean | null
           terms_accepted_at: string | null
+          ticket_number: string | null
           updated_at: string | null
         }
         Insert: {
+          amount_due?: number | null
+          amount_paid?: number | null
           assigned_stringer?: string | null
           created_at?: string | null
           drop_in_date: string
           email?: string | null
           id?: string
           member_name: string
+          paid_at?: string | null
+          paid_by_staff?: string | null
+          payment_status?: string | null
           phone: string
           pickup_deadline?: string | null
           racquet_max_tension_lbs?: number | null
@@ -95,15 +179,21 @@ export type Database = {
           tension_override_reason?: string | null
           terms_accepted?: boolean | null
           terms_accepted_at?: string | null
+          ticket_number?: string | null
           updated_at?: string | null
         }
         Update: {
+          amount_due?: number | null
+          amount_paid?: number | null
           assigned_stringer?: string | null
           created_at?: string | null
           drop_in_date?: string
           email?: string | null
           id?: string
           member_name?: string
+          paid_at?: string | null
+          paid_by_staff?: string | null
+          payment_status?: string | null
           phone?: string
           pickup_deadline?: string | null
           racquet_max_tension_lbs?: number | null
@@ -121,6 +211,7 @@ export type Database = {
           tension_override_reason?: string | null
           terms_accepted?: boolean | null
           terms_accepted_at?: string | null
+          ticket_number?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -129,6 +220,38 @@ export type Database = {
             columns: ["string_id"]
             isOneToOne: false
             referencedRelation: "strings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      status_events: {
+        Row: {
+          created_at: string | null
+          event_type: string
+          id: string
+          job_id: string
+          staff_name: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          event_type: string
+          id?: string
+          job_id: string
+          staff_name?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          event_type?: string
+          id?: string
+          job_id?: string
+          staff_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "status_events_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "racquet_jobs"
             referencedColumns: ["id"]
           },
         ]
