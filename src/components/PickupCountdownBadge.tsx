@@ -8,7 +8,7 @@ interface PickupCountdownBadgeProps {
 
 export function PickupCountdownBadge({ readyForPickupAt, status }: PickupCountdownBadgeProps) {
   // Only show for jobs that are ready for pickup / waiting
-  const pickupStatuses = ['ready_for_pickup', 'complete', 'waiting-pickup', 'waiting_pickup'];
+  const pickupStatuses = ['ready_for_pickup', 'complete', 'waiting-pickup', 'waiting_pickup', 'stringing_completed'];
   if (!readyForPickupAt || !pickupStatuses.includes(status ?? '')) return null;
 
   const days = differenceInCalendarDays(new Date(), parseISO(readyForPickupAt));

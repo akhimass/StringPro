@@ -13,7 +13,7 @@ import {
   recordPayment,
   markPickupCompleted,
 } from '@/lib/api';
-import { RacquetStatus, StringOption, RacquetJob } from '@/types';
+import { RacquetStatus, StringOption, RacquetJob, normalizeStatusKey } from '@/types';
 import { PickupCountdownBadge } from '@/components/PickupCountdownBadge';
 import { Header } from '@/components/Header';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -66,14 +66,15 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Package, Settings, Clock, AlertTriangle, ClipboardCheck, DollarSign, Paperclip } from 'lucide-react';
 
-const statusOptions: { value: RacquetStatus; label: string }[] = [
-  { value: 'received', label: 'Received by Front Desk' },
-  { value: 'ready-for-stringing', label: 'Ready for Stringing' },
-  { value: 'received-by-stringer', label: 'Received by Stringer' },
-  { value: 'stringing_completed' as RacquetStatus, label: 'Stringing Completed' },
-  { value: 'ready_for_pickup' as RacquetStatus, label: 'Ready for Pickup' },
-  { value: 'waiting-pickup', label: 'Waiting Pickup' },
-  { value: 'delivered', label: 'Pickup Completed' },
+// Canonical status options for the manager status selector
+const statusOptions: { value: string; label: string }[] = [
+  { value: 'received_front_desk', label: 'Received by Front Desk' },
+  { value: 'ready_for_stringing', label: 'Ready for Stringing' },
+  { value: 'received_by_stringer', label: 'Received by Stringer' },
+  { value: 'stringing_completed', label: 'Stringing Completed' },
+  { value: 'ready_for_pickup', label: 'Ready for Pickup' },
+  { value: 'waiting_pickup', label: 'Waiting Pickup' },
+  { value: 'pickup_completed', label: 'Pickup Completed' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
@@ -224,13 +225,15 @@ export default function Admin() {
     }
   };
 
-  // Filtered racquets
+  // Filtered racquets — use normalizeStatusKey for canonical filtering
   const filteredRacquets = racquets.filter((r) => {
-    const matchesStatus = statusFilter === 'all' || r.status === statusFilter;
+    const normalized = normalizeStatusKey(r.status);
+    const matchesStatus = statusFilter === 'all' || normalized === statusFilter;
     const matchesSearch =
       searchQuery === '' ||
       r.member_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (r.racquet_type?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
+      (r.racquet_type?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+      (r.ticket_number?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
     return matchesStatus && matchesSearch;
   });
 
@@ -399,7 +402,7 @@ export default function Admin() {
             <div className="card-elevated">
               <div className="p-4 border-b flex flex-col sm:flex-row gap-4">
                 <Input
-                  placeholder="Search by name or racquet type..."
+                  placeholder="Search by name, racquet, or ticket..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="sm:max-w-xs"
@@ -434,7 +437,7 @@ export default function Admin() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                         <TableHead>Ticket</TableHead>
+                        <TableHead>Ticket</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead>Racquet</TableHead>
                         <TableHead>String</TableHead>
@@ -454,8 +457,12 @@ export default function Admin() {
                         const amountDue = Number(racquet.amount_due) || 0;
                         const amountPaid = Number(racquet.amount_paid) || 0;
                         const balanceDue = Math.max(0, amountDue - amountPaid);
-                        const isFullyPaid = amountPaid >= amountDue;
+                        const isFullyPaid = amountDue > 0 && amountPaid >= amountDue;
                         const canRecordPayment = balanceDue > 0;
+                        const normalized = normalizeStatusKey(racquet.status);
+                        const isPickupDone = normalized === 'pickup_completed';
+                        const attachmentCount = racquet.job_attachments?.length ?? 0;
+
                         return (
                           <TableRow key={racquet.id} className="group">
                             <TableCell className="font-mono text-sm font-medium whitespace-nowrap">
@@ -464,7 +471,7 @@ export default function Admin() {
                             <TableCell>
                               <div>
                                 <p className="font-medium">{racquet.member_name}</p>
-                                <p className="text-xs text-muted-foreground">{racquet.email}</p>
+                                <p className="text-xs text-muted-foreground">{racquet.email || racquet.phone}</p>
                               </div>
                             </TableCell>
                             <TableCell>
@@ -495,9 +502,15 @@ export default function Admin() {
                             </TableCell>
                             <TableCell className="text-sm">
                               {racquet.string_tension ? `${racquet.string_tension} lbs` : 'N/A'}
+                              {racquet.racquet_max_tension_lbs && (
+                                <span className="block text-[10px] text-muted-foreground">
+                                  Max: {racquet.racquet_max_tension_lbs} lbs
+                                </span>
+                              )}
                               {racquet.tension_override_lbs && (
                                 <span className="block text-[10px] text-status-pending">
                                   Override: {racquet.tension_override_lbs} lbs
+                                  {racquet.tension_override_by && ` by ${racquet.tension_override_by}`}
                                 </span>
                               )}
                             </TableCell>
@@ -511,31 +524,34 @@ export default function Admin() {
                                 {racquet.assigned_stringer ? ` (${racquet.assigned_stringer})` : ''}
                               </span>
                             </TableCell>
-                            {/* Amount Due */}
-                            <TableCell className="text-sm font-medium">
-                              {typeof racquet.amount_due === 'number'
-                                ? `$${racquet.amount_due.toFixed(2)}`
-                                : '—'}
-                            </TableCell>
-                            {/* Payment Status */}
-                            <TableCell>
-                              <div className="flex flex-col gap-0.5">
-                                <PaymentStatusBadge
-                                  paymentStatus={racquet.payment_status as 'unpaid' | 'partial' | 'paid'}
-                                />
-                                {!isFullyPaid && balanceDue > 0 && (
-                                  <span className="text-[10px] text-muted-foreground">
-                                    ${balanceDue.toFixed(2)} left
-                                  </span>
+                            {/* Amount Due + Paid + Balance */}
+                            <TableCell className="text-sm">
+                              <div className="space-y-0.5">
+                                <p className="font-medium">
+                                  {typeof racquet.amount_due === 'number'
+                                    ? `$${amountDue.toFixed(2)}`
+                                    : '—'}
+                                </p>
+                                {amountPaid > 0 && (
+                                  <p className="text-[10px] text-muted-foreground">
+                                    Paid: ${amountPaid.toFixed(2)}
+                                  </p>
+                                )}
+                                {balanceDue > 0 && (
+                                  <p className="text-[10px] text-status-pending">
+                                    Bal: ${balanceDue.toFixed(2)}
+                                  </p>
                                 )}
                               </div>
                             </TableCell>
+                            {/* Payment Status */}
                             <TableCell>
-                              {racquet.status ? (
-                                <StatusBadge status={racquet.status} />
-                              ) : (
-                                <StatusBadge status="received" />
-                              )}
+                              <PaymentStatusBadge
+                                paymentStatus={racquet.payment_status as 'unpaid' | 'partial' | 'paid'}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <StatusBadge status={racquet.status} />
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1">
@@ -551,9 +567,9 @@ export default function Admin() {
                                   className="opacity-60 group-hover:opacity-100 relative"
                                 >
                                   <Paperclip className="w-4 h-4" />
-                                  {(racquet.job_attachments?.length ?? 0) > 0 && (
+                                  {attachmentCount > 0 && (
                                     <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center">
-                                      {racquet.job_attachments!.length}
+                                      {attachmentCount}
                                     </span>
                                   )}
                                 </Button>
@@ -604,9 +620,9 @@ export default function Admin() {
 
                                 {/* Status selector */}
                                 <Select
-                                  value={(racquet.status || 'received') as RacquetStatus}
-                                  onValueChange={(value: RacquetStatus) =>
-                                    updateStatusMutation.mutate({ id: racquet.id, status: value })
+                                  value={normalized}
+                                  onValueChange={(value) =>
+                                    updateStatusMutation.mutate({ id: racquet.id, status: value as RacquetStatus })
                                   }
                                 >
                                   <SelectTrigger className="w-36 h-8 text-xs">
@@ -622,7 +638,7 @@ export default function Admin() {
                                 </Select>
 
                                 {/* Pickup Complete (disabled if not fully paid) */}
-                                {racquet.status !== 'delivered' && (
+                                {!isPickupDone && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
@@ -708,9 +724,6 @@ export default function Admin() {
                         <TableHead>Brand</TableHead>
                         <TableHead>Name</TableHead>
                         <TableHead>Gauge</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>Qty</TableHead>
-                        <TableHead>Restock</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
@@ -721,12 +734,6 @@ export default function Admin() {
                           <TableCell className="font-medium">{string.brand}</TableCell>
                           <TableCell>{string.name}</TableCell>
                           <TableCell>{string.gauge}</TableCell>
-                          {/* UI placeholder columns */}
-                          <TableCell className="text-muted-foreground text-sm">—</TableCell>
-                          <TableCell>
-                            <span className="text-muted-foreground text-sm">—</span>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-sm">—</TableCell>
                           <TableCell>
                             <span
                               className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wide ${

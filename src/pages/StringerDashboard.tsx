@@ -11,7 +11,6 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { AttachmentsDialog } from '@/components/admin/AttachmentsDialog';
 import { PhotoUploadSection } from '@/components/dropoff/PhotoUploadSection';
-import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -70,7 +69,7 @@ export default function StringerDashboard() {
     onError: () => toast.error('Failed to update status'),
   });
 
-  // Filter: only show jobs that are ready_for_stringing (stringer can mark as completed)
+  // Filter: only ready_for_stringing and received_by_stringer
   const stringerJobs = racquets.filter((r) => {
     const normalized = normalizeStatusKey(r.status);
     const isStringerRelevant = normalized === 'ready_for_stringing' || normalized === 'received_by_stringer';
@@ -78,7 +77,8 @@ export default function StringerDashboard() {
     const matchesSearch =
       searchQuery === '' ||
       r.member_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (r.racquet_type?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
+      (r.racquet_type?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+      (r.ticket_number?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
     return isStringerRelevant && matchesStringer && matchesSearch;
   });
 
@@ -147,7 +147,7 @@ export default function StringerDashboard() {
         <div className="card-elevated">
           <div className="p-4 border-b flex flex-col sm:flex-row gap-4">
             <Input
-              placeholder="Search by name or racquet..."
+              placeholder="Search by name, racquet, or ticket..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="sm:max-w-xs"
@@ -190,70 +190,73 @@ export default function StringerDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {stringerJobs.map((job) => (
-                    <TableRow key={job.id} className="group">
-                      <TableCell className="font-mono text-sm font-medium whitespace-nowrap">
-                        {job.ticket_number || '—'}
-                      </TableCell>
-                      <TableCell className="font-medium">{job.member_name}</TableCell>
-                      <TableCell className="font-medium">
-                        {job.racquet_type?.replace(/\s+undefined\s*/gi, '').trim() || 'N/A'}
-                      </TableCell>
-                      <TableCell className="text-sm">{getStringName(job)}</TableCell>
-                      <TableCell className="text-sm">
-                        {job.string_tension ? `${job.string_tension} lbs` : 'N/A'}
-                        {job.tension_override_lbs && (
-                          <span className="block text-[10px] text-status-pending">
-                            Override: {job.tension_override_lbs} lbs
+                  {stringerJobs.map((job) => {
+                    const attachmentCount = job.job_attachments?.length ?? 0;
+                    return (
+                      <TableRow key={job.id} className="group">
+                        <TableCell className="font-mono text-sm font-medium whitespace-nowrap">
+                          {job.ticket_number || '—'}
+                        </TableCell>
+                        <TableCell className="font-medium">{job.member_name}</TableCell>
+                        <TableCell className="font-medium">
+                          {job.racquet_type?.replace(/\s+undefined\s*/gi, '').trim() || 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-sm">{getStringName(job)}</TableCell>
+                        <TableCell className="text-sm">
+                          {job.string_tension ? `${job.string_tension} lbs` : 'N/A'}
+                          {job.tension_override_lbs && (
+                            <span className="block text-[10px] text-status-pending">
+                              Override: {job.tension_override_lbs} lbs
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wide ${
+                            job.service_type === 'specialist'
+                              ? 'bg-status-pending-bg text-status-pending'
+                              : 'bg-muted text-muted-foreground'
+                          }`}>
+                            {job.service_type === 'specialist' ? 'Specialist' : 'Default'}
                           </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wide ${
-                          job.service_type === 'specialist'
-                            ? 'bg-status-pending-bg text-status-pending'
-                            : 'bg-muted text-muted-foreground'
-                        }`}>
-                          {job.service_type === 'specialist' ? 'Specialist' : 'Default'}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-sm">{job.assigned_stringer || '—'}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground max-w-[120px] truncate">
-                        {job.string_power || '—'}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={job.status} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {/* Attachments (read-only intake photos) */}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="View photos"
-                            onClick={() => { setAttachRacquet(job); setAttachDialogOpen(true); }}
-                            className="opacity-60 group-hover:opacity-100 relative"
-                          >
-                            <Paperclip className="w-4 h-4" />
-                            {(job.job_attachments?.length ?? 0) > 0 && (
-                              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center">
-                                {job.job_attachments!.length}
-                              </span>
-                            )}
-                          </Button>
-                          {/* Mark Completed */}
-                          <Button
-                            size="sm"
-                            className="gap-1"
-                            onClick={() => { setCompleteJob(job); setCompleteDialogOpen(true); }}
-                          >
-                            <Camera className="w-3.5 h-3.5" />
-                            Complete
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                        <TableCell className="text-sm">{job.assigned_stringer || '—'}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground max-w-[120px] truncate">
+                          {job.string_power || '—'}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={job.status} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {/* Attachments (view intake + upload completed photos) */}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="View photos"
+                              onClick={() => { setAttachRacquet(job); setAttachDialogOpen(true); }}
+                              className="opacity-60 group-hover:opacity-100 relative"
+                            >
+                              <Paperclip className="w-4 h-4" />
+                              {attachmentCount > 0 && (
+                                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center">
+                                  {attachmentCount}
+                                </span>
+                              )}
+                            </Button>
+                            {/* Mark Completed */}
+                            <Button
+                              size="sm"
+                              className="gap-1"
+                              onClick={() => { setCompleteJob(job); setCompleteDialogOpen(true); }}
+                            >
+                              <Camera className="w-3.5 h-3.5" />
+                              Complete
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}

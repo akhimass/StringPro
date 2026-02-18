@@ -193,8 +193,8 @@ export const updateRacquetStatus = async (id: string, status: RacquetStatus): Pr
     console.error('Failed to insert status_event', err);
   }
 
-  // Set ready_for_pickup_at when transitioning to ready_for_pickup or equivalent
-  const isReadyForPickup = status === 'ready_for_pickup' || status === 'complete';
+  // Set ready_for_pickup_at when transitioning to completed/ready_for_pickup
+  const isReadyForPickup = status === 'ready_for_pickup' || status === 'complete' || status === 'stringing_completed';
   const updatePayload: any = { status };
   if (isReadyForPickup) {
     updatePayload.ready_for_pickup_at = new Date().toISOString();
