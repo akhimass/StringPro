@@ -14,6 +14,7 @@ import {
   markPickupCompleted,
 } from '@/lib/api';
 import { RacquetStatus, StringOption, RacquetJob } from '@/types';
+import { PickupCountdownBadge } from '@/components/PickupCountdownBadge';
 import { Header } from '@/components/Header';
 import { StatusBadge } from '@/components/StatusBadge';
 import { DueStatusBadge } from '@/components/DueStatusBadge';
@@ -69,7 +70,8 @@ const statusOptions: { value: RacquetStatus; label: string }[] = [
   { value: 'received', label: 'Received by Front Desk' },
   { value: 'ready-for-stringing', label: 'Ready for Stringing' },
   { value: 'received-by-stringer', label: 'Received by Stringer' },
-  { value: 'complete', label: 'Ready for Pickup' },
+  { value: 'stringing_completed' as RacquetStatus, label: 'Stringing Completed' },
+  { value: 'ready_for_pickup' as RacquetStatus, label: 'Ready for Pickup' },
   { value: 'waiting-pickup', label: 'Waiting Pickup' },
   { value: 'delivered', label: 'Pickup Completed' },
   { value: 'cancelled', label: 'Cancelled' },
@@ -346,7 +348,7 @@ export default function Admin() {
         <Header />
         <main className="content-container">
           <div className="mb-8">
-            <h1 className="text-2xl font-semibold mb-2">Admin Dashboard</h1>
+            <h1 className="text-2xl font-semibold mb-2">Manager Dashboard</h1>
             <p className="text-muted-foreground">
               Manage racquet orders and string inventory.
             </p>
@@ -375,7 +377,7 @@ export default function Admin() {
       <Header />
       <main className="content-container">
         <div className="mb-8">
-          <h1 className="text-2xl font-semibold mb-2">Admin Dashboard</h1>
+          <h1 className="text-2xl font-semibold mb-2">Manager Dashboard</h1>
           <p className="text-muted-foreground">
             Manage racquet orders and string inventory.
           </p>
@@ -432,13 +434,15 @@ export default function Admin() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Ticket</TableHead>
+                         <TableHead>Ticket</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead>Racquet</TableHead>
                         <TableHead>String</TableHead>
                         <TableHead>Drop-off</TableHead>
                         <TableHead>Due Status</TableHead>
+                        <TableHead>Pickup</TableHead>
                         <TableHead>Tension</TableHead>
+                        <TableHead>Service</TableHead>
                         <TableHead>Amount</TableHead>
                         <TableHead>Payment</TableHead>
                         <TableHead>Status</TableHead>
@@ -486,7 +490,27 @@ export default function Admin() {
                                 status={racquet.status}
                               />
                             </TableCell>
-                            <TableCell className="text-sm">{racquet.string_tension ? `${racquet.string_tension} lbs` : 'N/A'}</TableCell>
+                            <TableCell>
+                              <PickupCountdownBadge readyForPickupAt={racquet.ready_for_pickup_at ?? null} status={racquet.status} />
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {racquet.string_tension ? `${racquet.string_tension} lbs` : 'N/A'}
+                              {racquet.tension_override_lbs && (
+                                <span className="block text-[10px] text-status-pending">
+                                  Override: {racquet.tension_override_lbs} lbs
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wide ${
+                                racquet.service_type === 'specialist'
+                                  ? 'bg-status-pending-bg text-status-pending'
+                                  : 'bg-muted text-muted-foreground'
+                              }`}>
+                                {racquet.service_type === 'specialist' ? 'Specialist' : 'Default'}
+                                {racquet.assigned_stringer ? ` (${racquet.assigned_stringer})` : ''}
+                              </span>
+                            </TableCell>
                             {/* Amount Due */}
                             <TableCell className="text-sm font-medium">
                               {typeof racquet.amount_due === 'number'

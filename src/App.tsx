@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import DropOff from "./pages/DropOff";
 import Admin from "./pages/Admin";
+import StringerDashboard from "./pages/StringerDashboard";
+import FrontDeskDashboard from "./pages/FrontDeskDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -26,6 +28,8 @@ function App() {
           <Routes>
             <Route path="/" element={<DropOff />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/stringer" element={<StringerDashboard />} />
+            <Route path="/frontdesk" element={<FrontDeskDashboard />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
