@@ -25,6 +25,8 @@ import { RecordPaymentDialog } from '@/components/admin/RecordPaymentDialog';
 import { FrontDeskReceiveDialog } from '@/components/admin/FrontDeskReceiveDialog';
 import { PickupCompleteDialog } from '@/components/admin/PickupCompleteDialog';
 import { AttachmentsDialog } from '@/components/admin/AttachmentsDialog';
+import { TensionDialog } from '@/components/admin/TensionDialog';
+import { sendSmsReminder, isDay8ReminderEligible, isDay10ReminderEligible } from '@/lib/messaging';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,7 +66,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Package, Settings, Clock, AlertTriangle, ClipboardCheck, DollarSign, Paperclip } from 'lucide-react';
+import { Plus, Pencil, Trash2, Package, Settings, Clock, AlertTriangle, ClipboardCheck, DollarSign, Paperclip, MessageSquare, Sliders } from 'lucide-react';
 
 // Canonical status options for the manager status selector
 const statusOptions: { value: string; label: string }[] = [
@@ -113,6 +115,16 @@ export default function Admin() {
   // Attachments dialog state
   const [attachDialogOpen, setAttachDialogOpen] = useState(false);
   const [attachRacquet, setAttachRacquet] = useState<RacquetJob | null>(null);
+
+  // Send reminder dialog state (Day 8 / Day 10)
+  const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
+  const [reminderJob, setReminderJob] = useState<RacquetJob | null>(null);
+  const [reminderType, setReminderType] = useState<'day8' | 'day10'>('day8');
+  const [reminderSending, setReminderSending] = useState(false);
+
+  // Tension dialog state
+  const [tensionDialogOpen, setTensionDialogOpen] = useState(false);
+  const [tensionRacquet, setTensionRacquet] = useState<RacquetJob | null>(null);
 
   // Record payment (full or partial)
   const recordPaymentMutation = useMutation({
@@ -207,6 +219,23 @@ export default function Admin() {
       setDeleteDialogOpen(false);
     },
   });
+
+  const handleSendReminderConfirm = async () => {
+    if (!reminderJob) return;
+    setReminderSending(true);
+    try {
+      const templateKey = reminderType === 'day8' ? 'day8_reminder' : 'day10_notice';
+      await sendSmsReminder(reminderJob.id, templateKey);
+      queryClient.invalidateQueries({ queryKey: ['racquets'] });
+      toast.success(reminderType === 'day8' ? 'Day 8 reminder sent (SMS)' : 'Day 10 notice sent (SMS)');
+      setReminderDialogOpen(false);
+      setReminderJob(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send reminder');
+    } finally {
+      setReminderSending(false);
+    }
+  };
 
   // Helper to get string name for a racquet job
   const getStringName = (job: RacquetJob): string => {
@@ -462,6 +491,8 @@ export default function Admin() {
                         const normalized = normalizeStatusKey(racquet.status);
                         const isPickupDone = normalized === 'pickup_completed';
                         const attachmentCount = racquet.job_attachments?.length ?? 0;
+                        const day8Eligible = isDay8ReminderEligible(racquet);
+                        const day10Eligible = isDay10ReminderEligible(racquet);
 
                         return (
                           <TableRow key={racquet.id} className="group">
@@ -501,13 +532,22 @@ export default function Admin() {
                               <PickupCountdownBadge readyForPickupAt={racquet.ready_for_pickup_at ?? null} status={racquet.status} />
                             </TableCell>
                             <TableCell className="text-sm">
-                              {racquet.string_tension ? `${racquet.string_tension} lbs` : 'N/A'}
-                              {racquet.racquet_max_tension_lbs && (
+                              {racquet.requested_tension_lbs != null
+                                ? `${racquet.requested_tension_lbs} lbs`
+                                : racquet.string_tension
+                                ? `${racquet.string_tension} lbs`
+                                : 'N/A'}
+                              {racquet.racquet_max_tension_lbs != null && (
                                 <span className="block text-[10px] text-muted-foreground">
                                   Max: {racquet.racquet_max_tension_lbs} lbs
                                 </span>
                               )}
-                              {racquet.tension_override_lbs && (
+                              {racquet.final_tension_lbs != null && (
+                                <span className="block text-[10px] text-muted-foreground">
+                                  Final: {racquet.final_tension_lbs} lbs
+                                </span>
+                              )}
+                              {racquet.tension_override_lbs != null && (
                                 <span className="block text-[10px] text-status-pending">
                                   Override: {racquet.tension_override_lbs} lbs
                                   {racquet.tension_override_by && ` by ${racquet.tension_override_by}`}
@@ -555,6 +595,20 @@ export default function Admin() {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1">
+                                {/* Tension */}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Tension"
+                                  onClick={() => {
+                                    setTensionRacquet(racquet);
+                                    setTensionDialogOpen(true);
+                                  }}
+                                  className="opacity-60 group-hover:opacity-100"
+                                >
+                                  <Sliders className="w-4 h-4" />
+                                </Button>
+
                                 {/* Attachments */}
                                 <Button
                                   variant="ghost"
@@ -574,6 +628,37 @@ export default function Admin() {
                                   )}
                                 </Button>
 
+                                {/* Send Day 8 / Day 10 reminders */}
+                                {day8Eligible && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    title="Send Day 8 reminder (SMS)"
+                                    onClick={() => {
+                                      setReminderJob(racquet);
+                                      setReminderType('day8');
+                                      setReminderDialogOpen(true);
+                                    }}
+                                    className="opacity-60 group-hover:opacity-100"
+                                  >
+                                    <MessageSquare className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                {day10Eligible && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    title="Send Day 10 notice (SMS)"
+                                    onClick={() => {
+                                      setReminderJob(racquet);
+                                      setReminderType('day10');
+                                      setReminderDialogOpen(true);
+                                    }}
+                                    className="opacity-60 group-hover:opacity-100 text-amber-600"
+                                  >
+                                    <MessageSquare className="w-4 h-4" />
+                                  </Button>
+                                )}
                                 {/* Timeline */}
                                 <Button
                                   variant="ghost"
@@ -901,6 +986,44 @@ export default function Admin() {
           onOpenChange={setAttachDialogOpen}
           racquet={attachRacquet}
         />
+
+        {/* Tension Dialog */}
+        <TensionDialog
+          open={tensionDialogOpen}
+          onOpenChange={setTensionDialogOpen}
+          racquet={tensionRacquet}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['racquets'] });
+          }}
+        />
+
+        {/* Send reminder confirm (Day 8 / Day 10) */}
+        <AlertDialog open={reminderDialogOpen} onOpenChange={setReminderDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {reminderType === 'day8' ? 'Send Day 8 Reminder' : 'Send Day 10 Notice'}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {reminderJob && (
+                  <>
+                    Send {reminderType === 'day8' ? 'Day 8 reminder' : 'Day 10 overdue notice'} (SMS) to{' '}
+                    <strong>{reminderJob.member_name}</strong>?
+                    {reminderJob.phone ? (
+                      <span className="block mt-1 text-muted-foreground text-sm">To: {reminderJob.phone}</span>
+                    ) : null}
+                  </>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={reminderSending}>Cancel</AlertDialogCancel>
+              <Button onClick={handleSendReminderConfirm} disabled={reminderSending}>
+                {reminderSending ? 'Sending…' : 'Send'}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
     </div>
   );

@@ -129,6 +129,7 @@ export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJ
       : formData.racquetBrand,
     string_id: formData.stringId,
     string_tension: parseFloat(formData.tension) || null,
+    requested_tension_lbs: Math.round(parseFloat(formData.tension)) || null,
     string_power: formData.notes || null,
     status: 'processing' as RacquetStatus,
     amount_due: amountDue,
@@ -211,6 +212,27 @@ export const updateRacquetStatus = async (id: string, status: RacquetStatus): Pr
   return data as unknown as RacquetJob;
 };
 
+/** Update tension-related fields (max, override). Trigger syncs final_tension_lbs. */
+export const updateRacquetTension = async (
+  jobId: string,
+  patch: {
+    racquet_max_tension_lbs?: number | null;
+    tension_override_lbs?: number | null;
+    tension_override_by?: string | null;
+    tension_override_reason?: string | null;
+  }
+): Promise<RacquetJob> => {
+  const { data, error } = await (supabase
+    .from('racquet_jobs')
+    .update(patch as any)
+    .eq('id', jobId)
+    .select(`*, strings (*), status_events (*), payment_events (*), job_attachments (*)`)
+    .single() as any);
+
+  if (error) throw error;
+  return data as unknown as RacquetJob;
+};
+
 // Front desk / payment helpers
 
 export const markReceivedByFrontDesk = async (
@@ -238,7 +260,8 @@ function derivePaymentStatus(amountPaid: number, amountDue: number): 'unpaid' | 
 }
 
 /**
- * Record a payment (full or partial).
+ * Record a payment (full or partial). Inserts into payment_events only; DB trigger
+ * updates racquet_jobs (amount_paid, payment_status, paid_at, paid_by_staff).
  */
 export const recordPayment = async (
   id: string,
@@ -264,9 +287,6 @@ export const recordPayment = async (
   const clampedAmount = balanceDue <= 0 ? 0 : Math.min(amount, balanceDue);
   if (clampedAmount <= 0) throw new Error('Job is already paid in full');
 
-  const newAmountPaid = currentPaid + clampedAmount;
-  const paymentStatus = derivePaymentStatus(newAmountPaid, amountDueVal);
-
   const { error: insertPayError } = await (supabase.from('payment_events' as any).insert({
     job_id: id,
     amount: clampedAmount,
@@ -274,21 +294,6 @@ export const recordPayment = async (
     staff_name: staffName,
   } as any) as any);
   if (insertPayError) throw insertPayError;
-
-  const { data, error } = await (supabase
-    .from('racquet_jobs')
-    .update({
-      amount_paid: newAmountPaid,
-      payment_status: paymentStatus,
-      paid_at: new Date().toISOString(),
-      paid_by_staff: staffName,
-    } as any)
-    .eq('id', id)
-    .select(`*, strings (*), status_events (*), payment_events (*)`)
-    .single() as any);
-
-  if (error) throw error;
-  if (!data) throw new Error('Update returned no row');
 
   try {
     await (supabase.from('status_events' as any).insert({
@@ -300,7 +305,15 @@ export const recordPayment = async (
     console.error('Failed to insert status_event (payment_recorded)', err);
   }
 
-  return data as unknown as RacquetJob;
+  const { data: updated, error } = await (supabase
+    .from('racquet_jobs')
+    .select(`*, strings (*), status_events (*), payment_events (*), job_attachments (*)`)
+    .eq('id', id)
+    .single() as any);
+
+  if (error) throw error;
+  if (!updated) throw new Error('Job not found after payment');
+  return updated as unknown as RacquetJob;
 };
 
 /** Pay in full: record payment for remaining balance. */

@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      profiles: {
+        Row: {
+          id: string
+          role: string
+          full_name: string | null
+        }
+        Insert: {
+          id: string
+          role?: string
+          full_name?: string | null
+        }
+        Update: {
+          id?: string
+          role?: string
+          full_name?: string | null
+        }
+        Relationships: []
+      }
       job_attachments: {
         Row: {
           created_at: string | null
@@ -133,6 +151,8 @@ export type Database = {
           phone: string
           pickup_deadline: string | null
           racquet_max_tension_lbs: number | null
+          requested_tension_lbs: number | null
+          final_tension_lbs: number | null
           racquet_type: string | null
           ready_for_pickup_at: string | null
           reminder_2_sent: boolean | null
@@ -165,6 +185,8 @@ export type Database = {
           phone: string
           pickup_deadline?: string | null
           racquet_max_tension_lbs?: number | null
+          requested_tension_lbs?: number | null
+          final_tension_lbs?: number | null
           racquet_type?: string | null
           ready_for_pickup_at?: string | null
           reminder_2_sent?: boolean | null
@@ -197,6 +219,8 @@ export type Database = {
           phone?: string
           pickup_deadline?: string | null
           racquet_max_tension_lbs?: number | null
+          requested_tension_lbs?: number | null
+          final_tension_lbs?: number | null
           racquet_type?: string | null
           ready_for_pickup_at?: string | null
           reminder_2_sent?: boolean | null

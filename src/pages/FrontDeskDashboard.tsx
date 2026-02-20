@@ -14,6 +14,7 @@ import { PaymentStatusBadge } from '@/components/admin/PaymentStatusBadge';
 import { RecordPaymentDialog } from '@/components/admin/RecordPaymentDialog';
 import { PickupCompleteDialog } from '@/components/admin/PickupCompleteDialog';
 import { AttachmentsDialog } from '@/components/admin/AttachmentsDialog';
+import { sendSmsReminder, isDay8ReminderEligible, isDay10ReminderEligible } from '@/lib/messaging';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,8 +28,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { DollarSign, Package, Paperclip, AlertTriangle, MonitorSmartphone } from 'lucide-react';
+import { DollarSign, Package, Paperclip, AlertTriangle, MonitorSmartphone, MessageSquare } from 'lucide-react';
 
 // Front desk sees: jobs that are completed/ready_for_pickup/waiting_pickup/overdue
 // Toggle to show pickup_completed (done) jobs
@@ -50,6 +60,10 @@ export default function FrontDeskDashboard() {
   const [pickupRacquet, setPickupRacquet] = useState<RacquetJob | null>(null);
   const [attachDialogOpen, setAttachDialogOpen] = useState(false);
   const [attachRacquet, setAttachRacquet] = useState<RacquetJob | null>(null);
+  const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
+  const [reminderJob, setReminderJob] = useState<RacquetJob | null>(null);
+  const [reminderType, setReminderType] = useState<'day8' | 'day10'>('day8');
+  const [reminderSending, setReminderSending] = useState(false);
 
   const { data: racquets = [], isLoading, error } = useQuery({
     queryKey: ['racquets'],
@@ -87,6 +101,23 @@ export default function FrontDeskDashboard() {
     recordPaymentMutation.mutate({ id: payRacquet.id, amount, staffName, paymentMethod }, {
       onSuccess: () => { setPayDialogOpen(false); setPayRacquet(null); },
     });
+  };
+
+  const handleSendReminderConfirm = async () => {
+    if (!reminderJob) return;
+    setReminderSending(true);
+    try {
+      const templateKey = reminderType === 'day8' ? 'day8_reminder' : 'day10_notice';
+      await sendSmsReminder(reminderJob.id, templateKey);
+      queryClient.invalidateQueries({ queryKey: ['racquets'] });
+      toast.success(reminderType === 'day8' ? 'Day 8 reminder sent (SMS)' : 'Day 10 notice sent (SMS)');
+      setReminderDialogOpen(false);
+      setReminderJob(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send reminder');
+    } finally {
+      setReminderSending(false);
+    }
   };
 
   const handlePickupComplete = (data: { paymentVerified: boolean; staffName: string; signature: string; notes: string }) => {
@@ -191,6 +222,8 @@ export default function FrontDeskDashboard() {
                     const normalized = normalizeStatusKey(job.status);
                     const isPickupDone = normalized === 'pickup_completed';
                     const attachmentCount = job.job_attachments?.length ?? 0;
+                    const day8Eligible = isDay8ReminderEligible(job);
+                    const day10Eligible = isDay10ReminderEligible(job);
 
                     return (
                       <TableRow key={job.id} className="group">
@@ -231,6 +264,28 @@ export default function FrontDeskDashboard() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
+                            {day8Eligible && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Send Day 8 reminder (SMS)"
+                                onClick={() => { setReminderJob(job); setReminderType('day8'); setReminderDialogOpen(true); }}
+                                className="opacity-60 group-hover:opacity-100"
+                              >
+                                <MessageSquare className="w-4 h-4" />
+                              </Button>
+                            )}
+                            {day10Eligible && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Send Day 10 notice (SMS)"
+                                onClick={() => { setReminderJob(job); setReminderType('day10'); setReminderDialogOpen(true); }}
+                                className="opacity-60 group-hover:opacity-100 text-amber-600"
+                              >
+                                <MessageSquare className="w-4 h-4" />
+                              </Button>
+                            )}
                             <Button variant="ghost" size="icon" title="Attachments"
                               onClick={() => { setAttachRacquet(job); setAttachDialogOpen(true); }}
                               className="opacity-60 group-hover:opacity-100 relative"
@@ -279,6 +334,33 @@ export default function FrontDeskDashboard() {
         <RecordPaymentDialog open={payDialogOpen} onOpenChange={setPayDialogOpen} racquet={payRacquet} onConfirm={handleRecordPayment} />
         <PickupCompleteDialog open={pickupDialogOpen} onOpenChange={setPickupDialogOpen} racquet={pickupRacquet} onConfirm={handlePickupComplete} />
         <AttachmentsDialog open={attachDialogOpen} onOpenChange={setAttachDialogOpen} racquet={attachRacquet} />
+
+        <AlertDialog open={reminderDialogOpen} onOpenChange={setReminderDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {reminderType === 'day8' ? 'Send Day 8 Reminder' : 'Send Day 10 Notice'}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {reminderJob && (
+                  <>
+                    Send {reminderType === 'day8' ? 'Day 8 reminder' : 'Day 10 overdue notice'} (SMS) to{' '}
+                    <strong>{reminderJob.member_name}</strong>?
+                    {reminderJob.phone ? (
+                      <span className="block mt-1 text-muted-foreground text-sm">To: {reminderJob.phone}</span>
+                    ) : null}
+                  </>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={reminderSending}>Cancel</AlertDialogCancel>
+              <Button onClick={handleSendReminderConfirm} disabled={reminderSending}>
+                {reminderSending ? 'Sending…' : 'Send'}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
     </div>
   );

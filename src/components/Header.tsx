@@ -1,5 +1,6 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 function RacquetIcon({ className }: { className?: string }) {
   return (
@@ -31,15 +32,20 @@ function RacquetIcon({ className }: { className?: string }) {
   );
 }
 
+const link = (path: string, label: string) => ({ path, label });
+
 export function Header() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { session, role, signOut } = useAuth();
 
-  const navItems = [
-    { path: '/', label: 'Drop-Off' },
-    { path: '/admin', label: 'Manager' },
-    { path: '/stringer', label: 'Stringer' },
-    { path: '/frontdesk', label: 'Front Desk' },
-  ];
+  const isStaff = role === 'admin' || role === 'frontdesk' || role === 'stringer';
+  const navItems: { path: string; label: string }[] = [link('/', 'Drop-Off')];
+  if (isStaff) {
+    if (role === 'admin') navItems.push(link('/admin', 'Manager'));
+    if (role === 'admin' || role === 'stringer') navItems.push(link('/stringer', 'Stringer'));
+    if (role === 'admin' || role === 'frontdesk') navItems.push(link('/frontdesk', 'Front Desk'));
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
@@ -67,6 +73,30 @@ export function Header() {
                 {item.label}
               </Link>
             ))}
+            {!session ? (
+              <Link
+                to="/login"
+                className={cn(
+                  'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                  location.pathname === '/login'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                )}
+              >
+                Login
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={async () => {
+                  await signOut();
+                  navigate('/');
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted"
+              >
+                Logout
+              </button>
+            )}
           </nav>
         </div>
       </div>

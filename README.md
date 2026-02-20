@@ -127,6 +127,35 @@ If the Supabase project is new, run the database setup SQL in **Supabase → SQL
 
 ---
 
+## Edge Functions & Messaging (SMS / Email)
+
+SMS verification (Twilio Verify), SMS reminders, and email notifications (Resend) run in **Supabase Edge Functions**. Secrets are set in **Supabase Dashboard → Project Settings → Edge Functions → Secrets** (never in the browser).
+
+### Required secrets
+
+| Secret | Description |
+|--------|-------------|
+| `TWILIO_ACCOUNT_SID` | Twilio account SID |
+| `TWILIO_AUTH_TOKEN` | Twilio auth token (keep server-side only) |
+| `TWILIO_VERIFY_SERVICE_SID` | Twilio Verify service SID (phone OTP) |
+| `TWILIO_FROM_NUMBER` | Twilio phone number for SMS (e.g. +15551234567) |
+| `EMAIL_PROVIDER_API_KEY` | Resend API key (or SendGrid/Mailgun if you switch the function) |
+| `EMAIL_FROM` | Sender email (e.g. `StringPro <notifications@yourdomain.com>`) |
+| `APP_BASE_URL` | Base URL of the app (e.g. `https://yourapp.vercel.app`) |
+| `SUPABASE_URL` | Supabase project URL (usually set automatically) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (for Edge Functions to insert status_events, etc.) |
+
+### Local dev (Edge Functions)
+
+```bash
+# From project root; requires Supabase CLI
+supabase functions serve --no-verify-jwt
+```
+
+Use `--no-verify-jwt` so the frontend can call functions without auth during development. Set the secrets above in a `.env.local` or via `supabase secrets set` so the functions can reach Twilio and Resend.
+
+---
+
 ## Supabase Backend Access (For Club Admins)
 
 - Supabase Dashboard → Table Editor
@@ -135,18 +164,50 @@ If the Supabase project is new, run the database setup SQL in **Supabase → SQL
   - `strings` – dropdown values
 
 **Staff Access**
-- Managed via Supabase Auth → Users
+- Managed via Supabase Auth → Users and `public.profiles.role`.
 
 **If Admin shows no data:**
-- Ensure you are logged in
-- Ensure correct Supabase project
+- Ensure you are logged in with a staff account (role `admin`, `frontdesk`, or `stringer` in `profiles`).
+- Ensure correct Supabase project.
+
+---
+
+## Staff Accounts and Roles
+
+- **Drop-off (`/`)** and **Login (`/login`)** are public; no account is required for customers or kiosk drop-off.
+- **Dashboards** (`/admin`, `/frontdesk`, `/stringer`) are staff-only. Only logged-in users with the right role can access them.
+
+### Creating a staff account
+
+1. **Sign up via the app**  
+   Go to `/login` and use “Sign up” (if you add it) or create the user in Supabase:
+   - **Supabase Dashboard → Authentication → Users → Add user**  
+   - Enter email and password (or use “Invite” and have the user set a password).
+
+2. **Promote to staff**  
+   New users get `role = 'customer'` from the `on_auth_user_created` trigger. To make them staff, set `profiles.role` to one of:
+   - `admin` – access to Manager, Stringer, and Front Desk
+   - `frontdesk` – access to Front Desk only
+   - `stringer` – access to Stringer only  
+
+   **Option A – SQL (Supabase → SQL Editor):**
+   ```sql
+   -- Replace the email with the staff member's auth email
+   UPDATE public.profiles
+   SET role = 'admin'
+   WHERE id = (SELECT id FROM auth.users WHERE email = 'staff@club.com');
+   ```
+
+   **Option B – Table Editor**  
+   Open **Table Editor → profiles**, find the row by user `id` (same as `auth.users.id`), and set `role` to `admin`, `frontdesk`, or `stringer`.
+
+3. **Log in**  
+   Staff sign in at `/login` with that email and password; they will see only the nav links allowed for their role (Drop-Off + relevant dashboard(s) + Logout).
 
 ---
 
 ## What This Version Does NOT Include (Yet)
-- Automated SMS or email reminders
-
-These can be added later as a paid upgrade.
+- Public “Sign up” link on the login page (staff are created in Dashboard or invited); JWT verification for Edge Functions can be tightened for production.
 
 ---
 

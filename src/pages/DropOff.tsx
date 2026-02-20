@@ -50,8 +50,8 @@ const formSchema = z.object({
     .min(1, 'Tension is required')
     .refine((val) => {
       const num = parseFloat(val);
-      return !isNaN(num) && isFinite(num) && num > 0 && num <= 100;
-    }, { message: 'Tension must be a valid number between 1 and 100 lbs.' }),
+      return !isNaN(num) && isFinite(num) && num > 0 && num <= 22;
+    }, { message: 'Tension must be between 1 and 22 lbs. Manager can override if needed.' }),
   notes: z.string().max(500).optional(),
   dropInDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
   termsAccepted: z.boolean().refine((v) => v === true, { message: 'You must accept the waiver & terms.' }),

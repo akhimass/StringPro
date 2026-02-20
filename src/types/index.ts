@@ -34,6 +34,8 @@ export interface RacquetJob {
   service_type?: string | null;
   assigned_stringer?: string | null;
   racquet_max_tension_lbs?: number | null;
+  requested_tension_lbs?: number | null;
+  final_tension_lbs?: number | null;
   tension_override_lbs?: number | null;
   tension_override_by?: string | null;
   tension_override_reason?: string | null;
