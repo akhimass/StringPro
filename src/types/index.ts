@@ -12,6 +12,7 @@ export interface StringOption {
   active: boolean | null;
   created_at?: string;
   price?: number | null;
+  extra_cost?: number | null;
 }
 
 export interface RacquetJob {

@@ -306,6 +306,7 @@ export type Database = {
           gauge: string | null
           id: string
           name: string
+          extra_cost: number | null
         }
         Insert: {
           active?: boolean | null
@@ -314,6 +315,7 @@ export type Database = {
           gauge?: string | null
           id?: string
           name: string
+          extra_cost?: number | null
         }
         Update: {
           active?: boolean | null
@@ -322,6 +324,7 @@ export type Database = {
           gauge?: string | null
           id?: string
           name?: string
+          extra_cost?: number | null
         }
         Relationships: []
       }

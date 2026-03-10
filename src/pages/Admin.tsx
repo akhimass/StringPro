@@ -95,7 +95,13 @@ export default function Admin() {
   // String dialog state
   const [stringDialogOpen, setStringDialogOpen] = useState(false);
   const [editingString, setEditingString] = useState<StringOption | null>(null);
-  const [stringForm, setStringForm] = useState({ name: '', brand: '', gauge: '', active: true });
+  const [stringForm, setStringForm] = useState({
+    name: '',
+    brand: '',
+    gauge: '',
+    extra_cost: '',
+    active: true,
+  });
 
   // Racquet brands state
   const [brandDialogOpen, setBrandDialogOpen] = useState(false);
@@ -336,11 +342,15 @@ export default function Admin() {
         name: string.name,
         brand: string.brand || '',
         gauge: string.gauge || '',
+        extra_cost:
+          typeof string.extra_cost === 'number' && string.extra_cost >= 0
+            ? String(string.extra_cost)
+            : '',
         active: string.active ?? true,
       });
     } else {
       setEditingString(null);
-      setStringForm({ name: '', brand: '', gauge: '', active: true });
+      setStringForm({ name: '', brand: '', gauge: '', extra_cost: '', active: true });
     }
     setStringDialogOpen(true);
   };
@@ -348,7 +358,7 @@ export default function Admin() {
   const closeStringDialog = () => {
     setStringDialogOpen(false);
     setEditingString(null);
-    setStringForm({ name: '', brand: '', gauge: '', active: true });
+    setStringForm({ name: '', brand: '', gauge: '', extra_cost: '', active: true });
   };
 
   const handleStringSubmit = () => {
@@ -357,10 +367,24 @@ export default function Admin() {
       return;
     }
 
+    const parsedExtra = stringForm.extra_cost.trim() === '' ? 0 : Number(stringForm.extra_cost);
+    if (Number.isNaN(parsedExtra) || parsedExtra < 0) {
+      toast.error('Extra cost must be a number greater than or equal to 0.');
+      return;
+    }
+
+    const payload = {
+      name: stringForm.name,
+      brand: stringForm.brand || null,
+      gauge: stringForm.gauge || null,
+      active: stringForm.active,
+      extra_cost: parsedExtra,
+    } as Partial<StringOption>;
+
     if (editingString) {
-      updateStringMutation.mutate({ id: editingString.id, data: stringForm });
+      updateStringMutation.mutate({ id: editingString.id, data: payload });
     } else {
-      createStringMutation.mutate(stringForm);
+      createStringMutation.mutate(payload as Omit<StringOption, 'id' | 'created_at'>);
     }
   };
 
@@ -912,6 +936,7 @@ export default function Admin() {
                         <TableHead>Brand</TableHead>
                         <TableHead>Name</TableHead>
                         <TableHead>Gauge</TableHead>
+                        <TableHead>Extra Cost</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
@@ -922,6 +947,13 @@ export default function Admin() {
                           <TableCell className="font-medium">{string.brand}</TableCell>
                           <TableCell>{string.name}</TableCell>
                           <TableCell>{string.gauge}</TableCell>
+                          <TableCell>
+                            <span className="text-sm">
+                              {typeof string.extra_cost === 'number'
+                                ? `$${string.extra_cost.toFixed(2)}`
+                                : '$0.00'}
+                            </span>
+                          </TableCell>
                           <TableCell>
                             <span
                               className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wide ${
@@ -1070,6 +1102,18 @@ export default function Admin() {
                   value={stringForm.gauge}
                   onChange={(e) => setStringForm({ ...stringForm, gauge: e.target.value })}
                   placeholder="e.g., 0.70mm"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="extra_cost">Extra Cost</Label>
+                <Input
+                  id="extra_cost"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={stringForm.extra_cost}
+                  onChange={(e) => setStringForm({ ...stringForm, extra_cost: e.target.value })}
+                  placeholder="0.00"
                 />
               </div>
               <div className="flex items-center justify-between">

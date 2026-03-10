@@ -1,40 +1,19 @@
 import { IntakeAddOns } from '@/types';
+import { BASE_LABOR_FEE, computePricing } from '@/lib/pricing';
 
 interface PriceSummaryCardProps {
   stringName?: string;
   addOns?: IntakeAddOns;
-  basePriceCents?: number;
-}
-
-const DEFAULT_BASE_FEE = 25;
-const RUSH_PRICES: Record<string, number> = { 'none': 0, '1-day': 10, '2-hour': 20 };
-const STRINGER_PRICES: Record<string, number> = { 'default': 0, 'stringer-a': 10 };
-const ADDON_FEE = 5; // grommet repair, grip replacement
-
-export function calculateTotal(addOns?: IntakeAddOns, basePrice?: number): number {
-  const base = typeof basePrice === 'number' && basePrice > 0 ? basePrice : DEFAULT_BASE_FEE;
-  const grommet = addOns?.grommetRepair ? ADDON_FEE : 0;
-  const grip = addOns?.gripAddOn ? ADDON_FEE : 0;
-  return (
-    base +
-    (RUSH_PRICES[addOns?.rushService ?? 'none'] ?? 0) +
-    (STRINGER_PRICES[addOns?.stringerOption ?? 'default'] ?? 0) +
-    grommet +
-    grip
-  );
+  /** Per-string extra cost in dollars (not including base labor). */
+  stringExtra?: number | null;
 }
 
 function formatPrice(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
-export function PriceSummaryCard({ stringName, addOns, basePriceCents }: PriceSummaryCardProps) {
-  const rushCost = RUSH_PRICES[addOns?.rushService || 'none'] || 0;
-  const stringerCost = STRINGER_PRICES[addOns?.stringerOption || 'default'] || 0;
-  const grommetCost = addOns?.grommetRepair ? ADDON_FEE : 0;
-  const gripCost = addOns?.gripAddOn ? ADDON_FEE : 0;
-  const basePrice = typeof basePriceCents === 'number' ? basePriceCents / 100 : undefined;
-  const total = calculateTotal(addOns, basePrice);
+export function PriceSummaryCard({ stringName, addOns, stringExtra }: PriceSummaryCardProps) {
+  const breakdown = computePricing({ stringExtra, addOns });
 
   return (
     <div className="card-elevated p-6 space-y-4">
@@ -50,38 +29,46 @@ export function PriceSummaryCard({ stringName, addOns, basePriceCents }: PriceSu
         <div className="flex items-center justify-between">
           <span className="text-muted-foreground">Base stringing fee</span>
           <span className="font-medium">
-            {formatPrice(basePrice ?? DEFAULT_BASE_FEE)}
+            {formatPrice(breakdown.baseLabor || BASE_LABOR_FEE)}
           </span>
         </div>
-        {rushCost > 0 && (
+        {breakdown.stringExtra > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">String selected</span>
+            <span className="font-medium">+{formatPrice(breakdown.stringExtra)}</span>
+          </div>
+        )}
+        {breakdown.rushFee > 0 && (
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">
               Rush service ({addOns?.rushService === '2-hour' ? '2-Hour' : '1-Day'})
             </span>
-            <span className="font-medium">+{formatPrice(rushCost)}</span>
+            <span className="font-medium">+{formatPrice(breakdown.rushFee)}</span>
           </div>
         )}
-        {stringerCost > 0 && (
+        {breakdown.stringerFee > 0 && (
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Stringer A</span>
-            <span className="font-medium">+{formatPrice(stringerCost)}</span>
+            <span className="font-medium">+{formatPrice(breakdown.stringerFee)}</span>
           </div>
         )}
-        {grommetCost > 0 && (
+        {breakdown.grommetFee > 0 && (
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Grommet repair</span>
-            <span className="font-medium">+{formatPrice(grommetCost)}</span>
+            <span className="font-medium">+{formatPrice(breakdown.grommetFee)}</span>
           </div>
         )}
-        {gripCost > 0 && (
+        {breakdown.gripFee > 0 && (
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Grip replacement</span>
-            <span className="font-medium">+{formatPrice(gripCost)}</span>
+            <span className="font-medium">+{formatPrice(breakdown.gripFee)}</span>
           </div>
         )}
         <div className="border-t border-border pt-3 flex items-center justify-between">
           <span className="font-semibold">Estimated Total</span>
-          <span className="font-semibold text-primary">{formatPrice(total)}</span>
+          <span className="font-semibold text-primary">
+            {formatPrice(breakdown.total)}
+          </span>
         </div>
       </div>
 

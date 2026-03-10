@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { StringOption, RacquetJob, RacquetFormData, RacquetStatus, IntakeAddOns, RacquetBrand } from '@/types';
 import { normalizeUSPhone } from '@/lib/validation';
+import { computeAmountDue } from '@/lib/pricing';
 
 // Racquet brands API
 export const fetchBrands = async (): Promise<RacquetBrand[]> => {
@@ -83,10 +84,10 @@ export const deleteString = async (id: string): Promise<void> => {
 
 /** Starter strings for empty table (admin-only seed helper). */
 const STARTER_STRINGS: Omit<StringOption, 'id' | 'created_at'>[] = [
-  { name: 'BG65', brand: 'Yonex', gauge: '0.70mm', active: true, price: 25 },
-  { name: 'BG80', brand: 'Yonex', gauge: '0.68mm', active: true, price: 30 },
-  { name: 'RPM Blast', brand: 'Babolat', gauge: '1.25mm', active: true, price: 28 },
-  { name: 'NXT', brand: 'Wilson', gauge: '1.30mm', active: true, price: 26 },
+  { name: 'BG65', brand: 'Yonex', gauge: '0.70mm', active: true, price: 0, extra_cost: 5 },
+  { name: 'BG80', brand: 'Yonex', gauge: '0.68mm', active: true, price: 0, extra_cost: 7 },
+  { name: 'RPM Blast', brand: 'Babolat', gauge: '1.25mm', active: true, price: 0, extra_cost: 6 },
+  { name: 'NXT', brand: 'Wilson', gauge: '1.30mm', active: true, price: 0, extra_cost: 4 },
 ];
 
 export const seedStarterStrings = async (): Promise<number> => {
@@ -144,10 +145,10 @@ export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJ
     pickupDeadline = computeLocalDate(dt);
   }
 
-  // Look up selected string to get base price
+  // Look up selected string to get extra cost
   const { data: stringRow, error: stringError } = await supabase
     .from('strings')
-    .select('id, price' as any)
+    .select('id, extra_cost, price' as any)
     .eq('id', formData.stringId)
     .maybeSingle();
 
@@ -155,22 +156,36 @@ export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJ
   if (!stringRow) throw new Error('Selected string not found');
 
   const sr = stringRow as any;
-  const BASE_FEE = typeof sr.price === 'number' && sr.price > 0 ? Number(sr.price) : 25;
+  const rawExtra = sr.extra_cost;
+  const rawPrice = sr.price;
+  const extraFromExtra =
+    typeof rawExtra === 'number'
+      ? rawExtra
+      : rawExtra != null
+      ? Number(rawExtra)
+      : NaN;
+  const extraFromPrice =
+    typeof rawPrice === 'number'
+      ? rawPrice
+      : rawPrice != null
+      ? Number(rawPrice)
+      : NaN;
+  let stringExtra = 0;
+  if (Number.isFinite(extraFromExtra) && extraFromExtra >= 0) {
+    stringExtra = Number(extraFromExtra);
+  } else if (Number.isFinite(extraFromPrice) && extraFromPrice >= 0) {
+    stringExtra = Number(extraFromPrice);
+  } else if (typeof console !== 'undefined') {
+    // Dev-only guard: warn if a string has invalid pricing metadata; fall back to zero extra cost.
+    console.warn('[StringPro] Invalid string pricing; treating extra cost as 0.', {
+      id: sr.id,
+      extra_cost: rawExtra,
+      price: rawPrice,
+    });
+  }
 
   const addOns = formData.addOns;
-  const rushService = addOns?.rushService ?? 'none';
-  const stringerOption = addOns?.stringerOption ?? 'default';
-
-  const rushFee =
-    rushService === '1-day' ? 10 :
-    rushService === '2-hour' ? 20 :
-    0;
-
-  const stringerAFee = stringerOption === 'stringer-a' ? 10 : 0;
-  const grommetFee = addOns?.grommetRepair ? 5 : 0;
-  const gripFee = addOns?.gripAddOn ? 5 : 0;
-
-  const amountDue = BASE_FEE + rushFee + stringerAFee + grommetFee + gripFee;
+  const amountDue = computeAmountDue({ addOns, stringExtra });
 
   const serviceType = addOns?.stringerOption === 'stringer-a' ? 'specialist' : 'default';
   const assignedStringer = serviceType === 'specialist' ? 'A' : null;

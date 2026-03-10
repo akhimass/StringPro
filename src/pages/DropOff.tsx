@@ -9,7 +9,7 @@ import { fetchStrings, fetchBrands, createRacquet, uploadMultipleJobPhotos } fro
 import { RacquetFormData, IntakeAddOns } from '@/types';
 import { Header } from '@/components/Header';
 import { RequiredLabel } from '@/components/RequiredLabel';
-import { PriceSummaryCard, calculateTotal } from '@/components/PriceSummaryCard';
+import { PriceSummaryCard } from '@/components/PriceSummaryCard';
 import { WaiverSection } from '@/components/WaiverSection';
 import { VerificationInput } from '@/components/VerificationInput';
 import { IntakeAddOnsSection } from '@/components/dropoff/IntakeAddOns';
@@ -32,6 +32,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
+import { computeAmountDue } from '@/lib/pricing';
 import { Link } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 
@@ -240,6 +241,12 @@ export default function DropOff() {
   const selectedStringLabel = selectedString
     ? `${selectedString.brand || ''} ${selectedString.name}`.trim()
     : undefined;
+  const selectedStringExtra =
+    typeof selectedString?.extra_cost === 'number' && selectedString.extra_cost >= 0
+      ? Number(selectedString.extra_cost)
+      : typeof selectedString?.price === 'number' && selectedString.price >= 0
+      ? Number(selectedString.price)
+      : 0;
 
   // Check if form can be submitted (UI-only disabled state)
   const canSubmit = true; // In production: phoneVerified && emailVerified
@@ -253,7 +260,7 @@ export default function DropOff() {
             ticketNumber={submittedTicket}
             amountDue={
               submittedAmountDue ??
-              calculateTotal(addOns, selectedString?.price ?? undefined)
+              computeAmountDue({ addOns, stringExtra: selectedStringExtra })
             }
             onNewSubmission={handleNewSubmission}
           />
@@ -444,7 +451,7 @@ export default function DropOff() {
                     <Input
                       id="tension"
                       type="number"
-                      step="0.1"
+                      step="1"
                       min="1"
                       max="100"
                       {...register('tension', {
@@ -456,6 +463,9 @@ export default function DropOff() {
                     {errors.tension && (
                       <p className="text-sm text-destructive">{errors.tension.message}</p>
                     )}
+                    <p className="text-xs text-muted-foreground">
+                      Requested tension is subject to racquet limits and may be adjusted by the manager if needed.
+                    </p>
                   </div>
                 </div>
 
@@ -483,7 +493,7 @@ export default function DropOff() {
               <PriceSummaryCard
                 stringName={selectedStringLabel}
                 addOns={addOns}
-                basePriceCents={selectedString?.price != null ? Math.round(Number(selectedString.price) * 100) : undefined}
+                stringExtra={selectedStringExtra}
               />
 
               {/* Waiver & Terms */}
