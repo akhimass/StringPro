@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { useMemo, useEffect } from 'react';
 import { normalizeUSPhone, isValidEmail } from '@/lib/validation';
 import { fetchStrings, fetchBrands, createRacquet, uploadMultipleJobPhotos } from '@/lib/api';
+import { supabaseConfigError } from '@/lib/supabase';
 import { RacquetFormData, IntakeAddOns } from '@/types';
 import { Header } from '@/components/Header';
 import { RequiredLabel } from '@/components/RequiredLabel';
@@ -51,7 +52,11 @@ const formSchema = z.object({
     .min(1, 'Phone is required')
     .max(30)
     .refine((val) => normalizeUSPhone(val) !== null, { message: 'Enter a valid US phone number (e.g., (555) 123-4567 or 555-123-4567).' }),
-  customerEmail: z.string().min(1, 'Email is required').max(255).refine(isValidEmail, { message: 'Enter a valid email address.' }),
+  customerEmail: z
+    .string()
+    .max(255)
+    .optional()
+    .refine((val) => !val || val.trim() === '' || isValidEmail(val), { message: 'Enter a valid email address.' }),
   racquetBrand: z.string().min(1, 'Racquet brand is required').max(100),
   racquetModel: z.string().max(100).optional(),
   stringId: z.string().min(1, 'String selection is required'),
@@ -93,10 +98,46 @@ export default function DropOff() {
   const [phoneVerified] = useState(false);
   const [emailVerified] = useState(false);
 
-  const { data: strings = [], isLoading: stringsLoading } = useQuery({
+  const {
+    data: strings = [],
+    isLoading: stringsLoading,
+    isError: stringsError,
+    refetch: refetchStrings,
+  } = useQuery({
     queryKey: ['strings'],
-    queryFn: fetchStrings,
-    staleTime: 2 * 60 * 1000,
+    queryFn: async () => {
+      try {
+        return await fetchStrings();
+      } catch (err) {
+        if (import.meta.env.DEV && err) console.error('[StringPro] fetchStrings error', err);
+        throw err;
+      }
+    },
+    retry: 2,
+    staleTime: 30_000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const {
+    data: brands = [],
+    isLoading: brandsLoading,
+    isError: brandsError,
+    refetch: refetchBrands,
+  } = useQuery({
+    queryKey: ['racquet_brands'],
+    queryFn: async () => {
+      try {
+        return await fetchBrands();
+      } catch (err) {
+        if (import.meta.env.DEV && err) console.error('[StringPro] fetchBrands error', err);
+        throw err;
+      }
+    },
+    retry: 2,
+    staleTime: 30_000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const {
@@ -129,17 +170,12 @@ export default function DropOff() {
   const watchedStringId = watch('stringId');
   const watchedBrand = watch('racquetBrand');
 
-  const { data: brands = [], isLoading: brandsLoading, isError: brandsError } = useQuery({
-    queryKey: ['racquet_brands'],
-    queryFn: fetchBrands,
-    staleTime: 2 * 60 * 1000,
-  });
-
   const activeStrings = useMemo(() => strings.filter((s) => s.active), [strings]);
   const validStringId =
     watchedStringId && activeStrings.some((s) => s.id === watchedStringId) ? watchedStringId : '';
+  const validBrand = watchedBrand && brands.some((b) => b.name === watchedBrand) ? watchedBrand : '';
 
-  // Defensive: if selected stringId is not in options, clear it so Select doesn't break
+  // Defensive: clear select values when they are not in loaded options
   useEffect(() => {
     if (!watchedStringId) return;
     const exists = activeStrings.some((s) => s.id === watchedStringId);
@@ -147,6 +183,32 @@ export default function DropOff() {
       setValue('stringId', '');
     }
   }, [watchedStringId, activeStrings, setValue]);
+
+  useEffect(() => {
+    if (!watchedBrand) return;
+    const exists = brands.some((b) => b.name === watchedBrand);
+    if (!exists && brands.length > 0) {
+      setValue('racquetBrand', '');
+    }
+  }, [watchedBrand, brands, setValue]);
+
+  // Dev-only: one-time log on mount (Supabase env)
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log('[StringPro] DropOff mount', supabaseConfigError ? 'Supabase config missing' : 'SUPABASE_URL set');
+    }
+  }, []);
+  // Dev-only: log load counts when data is available
+  useEffect(() => {
+    if (import.meta.env.DEV && !stringsLoading && strings.length >= 0) {
+      console.log('[StringPro] strings loaded', strings.length);
+    }
+  }, [stringsLoading, strings.length]);
+  useEffect(() => {
+    if (import.meta.env.DEV && !brandsLoading && brands.length >= 0) {
+      console.log('[StringPro] brands loaded', brands.length);
+    }
+  }, [brandsLoading, brands.length]);
 
   const mutation = useMutation({
     mutationFn: async (data: RacquetFormData) => {
@@ -195,7 +257,9 @@ export default function DropOff() {
     const pickupDeadline = toLocalDateString(dropDateObj);
 
     const normalizedPhone = normalizeUSPhone(data.customerPhone) as string;
-    const normalizedEmail = data.customerEmail.trim().toLowerCase();
+    const normalizedEmail = data.customerEmail?.trim()
+      ? data.customerEmail.trim().toLowerCase()
+      : '';
 
     const payload: RacquetFormData = {
       ...(data as unknown as RacquetFormData),
@@ -284,14 +348,14 @@ export default function DropOff() {
             </p>
           </div>
 
-          {!stringsLoading && activeStrings.length === 0 ? (
+          {!stringsError && !stringsLoading && activeStrings.length === 0 ? (
             <div className="card-elevated p-6 animate-fade-in">
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 rounded-full bg-status-pending-bg flex items-center justify-center flex-shrink-0">
                   <AlertCircle className="w-5 h-5 text-status-pending" />
                 </div>
                 <div>
-                  <h3 className="font-medium mb-1">No Strings Available</h3>
+                  <h3 className="font-medium mb-1">No strings available</h3>
                   <p className="text-sm text-muted-foreground mb-4">
                     There are currently no strings available for selection. Please contact an administrator.
                   </p>
@@ -353,10 +417,10 @@ export default function DropOff() {
                   register={register('customerPhone')}
                 />
 
-                {/* Email with verification */}
+                {/* Email (optional) */}
                 <VerificationInput
                   id="customerEmail"
-                  label="Email"
+                  label="Email (optional)"
                   type="email"
                   placeholder="john@email.com"
                   value={watch('customerEmail')}
@@ -376,20 +440,39 @@ export default function DropOff() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <RequiredLabel htmlFor="racquetBrand">Racquet Brand</RequiredLabel>
-                    {brandsError ? (
-                      <Input
-                        id="racquetBrand"
-                        {...register('racquetBrand')}
-                        placeholder="Yonex"
-                        aria-invalid={!!errors.racquetBrand}
-                      />
-                    ) : brandsLoading ? (
+                    {brandsError && (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm text-destructive">Unable to load brands. Please try again.</p>
+                        <Button type="button" variant="outline" size="sm" onClick={() => refetchBrands()}>
+                          Retry
+                        </Button>
+                        <Input
+                          id="racquetBrand"
+                          {...register('racquetBrand')}
+                          placeholder="Enter brand name"
+                          aria-invalid={!!errors.racquetBrand}
+                        />
+                      </div>
+                    )}
+                    {!brandsError && brandsLoading && (
                       <div className="flex h-10 items-center rounded-md border border-input bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
                         Loading brands…
                       </div>
-                    ) : (
+                    )}
+                    {!brandsError && !brandsLoading && brands.length === 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">No brands available.</p>
+                        <Input
+                          id="racquetBrand"
+                          {...register('racquetBrand')}
+                          placeholder="Enter brand name"
+                          aria-invalid={!!errors.racquetBrand}
+                        />
+                      </div>
+                    )}
+                    {!brandsError && !brandsLoading && brands.length > 0 && (
                       <Select
-                        value={watchedBrand || undefined}
+                        value={validBrand || undefined}
                         onValueChange={(value) => setValue('racquetBrand', value, { shouldValidate: true })}
                       >
                         <SelectTrigger id="racquetBrand" aria-invalid={!!errors.racquetBrand}>
@@ -425,13 +508,23 @@ export default function DropOff() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <RequiredLabel>String Required</RequiredLabel>
-                    <Select
-                      value={validStringId || undefined}
-                      onValueChange={(value) => setValue('stringId', value, { shouldValidate: true })}
-                    >
-                      <SelectTrigger aria-invalid={!!errors.stringId}>
-                        <SelectValue placeholder="Select a string" />
-                      </SelectTrigger>
+                    {stringsError && (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm text-destructive">Unable to load strings. Please try again.</p>
+                        <Button type="button" variant="outline" size="sm" onClick={() => refetchStrings()}>
+                          Retry
+                        </Button>
+                      </div>
+                    )}
+                    {!stringsError && (
+                      <Select
+                        value={validStringId || undefined}
+                        onValueChange={(value) => setValue('stringId', value, { shouldValidate: true })}
+                        disabled={stringsLoading}
+                      >
+                        <SelectTrigger aria-invalid={!!errors.stringId}>
+                          <SelectValue placeholder={stringsLoading ? 'Loading strings…' : 'Select a string'} />
+                        </SelectTrigger>
                       <SelectContent>
                         {activeStrings.map((s) => (
                           <SelectItem key={s.id} value={s.id}>
@@ -457,6 +550,7 @@ export default function DropOff() {
                         ))}
                       </SelectContent>
                     </Select>
+                    )}
                     {errors.stringId && (
                       <p className="text-sm text-destructive">{errors.stringId.message}</p>
                     )}
