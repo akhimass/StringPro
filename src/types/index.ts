@@ -1,3 +1,9 @@
+export interface RacquetBrand {
+  id: string;
+  name: string;
+  created_at?: string | null;
+}
+
 export interface StringOption {
   id: string;
   name: string;

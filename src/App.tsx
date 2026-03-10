@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { supabaseConfigError } from "@/lib/supabase";
 import DropOff from "./pages/DropOff";
 import Admin from "./pages/Admin";
 import StringerDashboard from "./pages/StringerDashboard";
@@ -27,6 +28,14 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <Sonner />
+        {supabaseConfigError && (
+          <div
+            className="sticky top-0 z-[100] bg-destructive text-destructive-foreground px-4 py-2 text-center text-sm font-medium"
+            role="alert"
+          >
+            {supabaseConfigError}
+          </div>
+        )}
         <BrowserRouter>
           <AuthProvider>
             <Routes>

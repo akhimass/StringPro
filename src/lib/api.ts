@@ -1,6 +1,42 @@
 import { supabase } from '@/lib/supabase';
-import { StringOption, RacquetJob, RacquetFormData, RacquetStatus, IntakeAddOns } from '@/types';
+import { StringOption, RacquetJob, RacquetFormData, RacquetStatus, IntakeAddOns, RacquetBrand } from '@/types';
 import { normalizeUSPhone } from '@/lib/validation';
+
+// Racquet brands API
+export const fetchBrands = async (): Promise<RacquetBrand[]> => {
+  const { data, error } = await supabase
+    .from('racquet_brands')
+    .select('*')
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return (data || []) as RacquetBrand[];
+};
+
+export const createBrand = async (name: string): Promise<RacquetBrand> => {
+  const { data, error } = await supabase
+    .from('racquet_brands')
+    .insert({ name: name.trim() })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as RacquetBrand;
+};
+
+export const updateBrand = async (id: string, name: string): Promise<RacquetBrand> => {
+  const { data, error } = await supabase
+    .from('racquet_brands')
+    .update({ name: name.trim() })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as RacquetBrand;
+};
+
+export const deleteBrand = async (id: string): Promise<void> => {
+  const { error } = await supabase.from('racquet_brands').delete().eq('id', id);
+  if (error) throw error;
+};
 
 // Strings API
 export const fetchStrings = async (): Promise<StringOption[]> => {
@@ -43,6 +79,27 @@ export const deleteString = async (id: string): Promise<void> => {
     .eq('id', id);
   
   if (error) throw error;
+};
+
+/** Starter strings for empty table (admin-only seed helper). */
+const STARTER_STRINGS: Omit<StringOption, 'id' | 'created_at'>[] = [
+  { name: 'BG65', brand: 'Yonex', gauge: '0.70mm', active: true, price: 25 },
+  { name: 'BG80', brand: 'Yonex', gauge: '0.68mm', active: true, price: 30 },
+  { name: 'RPM Blast', brand: 'Babolat', gauge: '1.25mm', active: true, price: 28 },
+  { name: 'NXT', brand: 'Wilson', gauge: '1.30mm', active: true, price: 26 },
+];
+
+export const seedStarterStrings = async (): Promise<number> => {
+  let count = 0;
+  for (const s of STARTER_STRINGS) {
+    try {
+      await createString(s);
+      count += 1;
+    } catch {
+      // skip duplicates or errors
+    }
+  }
+  return count;
 };
 
 // Racquet Jobs API

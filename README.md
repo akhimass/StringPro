@@ -46,6 +46,24 @@ Open the URL printed in the terminal (usually `http://localhost:5173`).
 
 ---
 
+## Deploy to Vercel
+
+1. **Import** the repo (e.g. `akhimass/StringPro`) as a **New Project** in [Vercel](https://vercel.com). Use **main** branch.
+2. **Framework**: Vite (auto-detected). **Build**: `npm run build`, **Output**: `dist`.
+3. **Environment variables (required for Production)**  
+   In the project’s **Settings → Environment Variables**, add these for **Production** (and optionally Preview/Development):
+
+   | Name | Description |
+   |------|-------------|
+   | `VITE_SUPABASE_URL` | Your Supabase project URL (e.g. `https://xxxx.supabase.co`) |
+   | `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | Supabase **anon** (publishable) key from Project Settings → API |
+
+   These are the **exact** names the app uses (`src/lib/supabase.ts`). If either is missing, you’ll see an error banner and “Invalid API key” or “no strings” on DropOff.
+4. **Redeploy** after saving env vars (env is baked in at build time).
+5. **Supabase**: Ensure all migrations are applied and the `strings` table is readable by anonymous users (see **Database Setup** and **Strings access for DropOff** below).
+
+---
+
 ## What StringPro Does
 
 ### Front Desk Intake (Drop-Off)
@@ -122,6 +140,17 @@ If the Supabase project is new, run the database setup SQL in **Supabase → SQL
 - Trigger: auto-set `pickup_deadline`
 - Validation constraints (phone/email)
 - RLS policies
+
+Run all migrations in `supabase/migrations/` in order (or use `supabase db push`). The migration `20260220100000_auth_profiles_rls.sql` enables RLS on `strings` and adds a **Public can select strings** policy so the DropOff form (anonymous users) can load the string list.
+
+**Strings access for DropOff:** If DropOff shows “No strings available” and you’ve confirmed the `strings` table has rows, anonymous SELECT may be blocked. Run this in **Supabase → SQL Editor** (idempotent):
+
+```sql
+ALTER TABLE public.strings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public can select strings" ON public.strings;
+CREATE POLICY "Public can select strings"
+  ON public.strings FOR SELECT TO public USING (true);
+```
 
 **Storage (photo uploads):** You cannot create the bucket via SQL. In **Supabase Dashboard → Storage**, create a bucket named **`racquet-photos`** and set it to **Public** so drop-off and completed photos work. Upload paths are `jobs/<job_id>/intake/...` and `jobs/<job_id>/completed/...`.
 

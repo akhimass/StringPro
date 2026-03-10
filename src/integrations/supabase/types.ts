@@ -32,6 +32,24 @@ export type Database = {
         }
         Relationships: []
       }
+      racquet_brands: {
+        Row: {
+          id: string
+          name: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          created_at?: string | null
+        }
+        Relationships: []
+      }
       job_attachments: {
         Row: {
           created_at: string | null

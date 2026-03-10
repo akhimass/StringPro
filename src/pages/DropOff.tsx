@@ -3,8 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useMemo, useEffect } from 'react';
 import { normalizeUSPhone, isValidEmail } from '@/lib/validation';
-import { fetchStrings, createRacquet, uploadMultipleJobPhotos } from '@/lib/api';
+import { fetchStrings, fetchBrands, createRacquet, uploadMultipleJobPhotos } from '@/lib/api';
 import { RacquetFormData, IntakeAddOns } from '@/types';
 import { Header } from '@/components/Header';
 import { RequiredLabel } from '@/components/RequiredLabel';
@@ -34,6 +35,14 @@ import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 
+function getTodayLocalYYYYMMDD(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 const formSchema = z.object({
   customerName: z.string().min(1, 'Name is required').max(100),
   customerPhone: z
@@ -53,7 +62,10 @@ const formSchema = z.object({
       return !isNaN(num) && isFinite(num) && num > 0 && num <= 22;
     }, { message: 'Tension must be between 1 and 22 lbs. Manager can override if needed.' }),
   notes: z.string().max(500).optional(),
-  dropInDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
+  dropInDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format')
+    .refine((val) => val >= getTodayLocalYYYYMMDD(), { message: 'Drop-off date cannot be in the past.' }),
   termsAccepted: z.boolean().refine((v) => v === true, { message: 'You must accept the waiver & terms.' }),
   signature: z.string().min(1, 'Signature is required').max(100),
 });
@@ -83,9 +95,8 @@ export default function DropOff() {
   const { data: strings = [], isLoading: stringsLoading } = useQuery({
     queryKey: ['strings'],
     queryFn: fetchStrings,
+    staleTime: 2 * 60 * 1000,
   });
-
-  const activeStrings = strings.filter((s) => s.active);
 
   const {
     register,
@@ -108,17 +119,33 @@ export default function DropOff() {
       stringId: '',
       tension: '',
       notes: '',
-      dropInDate: (() => {
-        const d = new Date();
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
-      })(),
+      dropInDate: getTodayLocalYYYYMMDD(),
       termsAccepted: false,
       signature: '',
     },
   });
+
+  const watchedStringId = watch('stringId');
+  const watchedBrand = watch('racquetBrand');
+
+  const { data: brands = [], isLoading: brandsLoading, isError: brandsError } = useQuery({
+    queryKey: ['racquet_brands'],
+    queryFn: fetchBrands,
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const activeStrings = useMemo(() => strings.filter((s) => s.active), [strings]);
+  const validStringId =
+    watchedStringId && activeStrings.some((s) => s.id === watchedStringId) ? watchedStringId : '';
+
+  // Defensive: if selected stringId is not in options, clear it so Select doesn't break
+  useEffect(() => {
+    if (!watchedStringId) return;
+    const exists = activeStrings.some((s) => s.id === watchedStringId);
+    if (!exists && activeStrings.length > 0) {
+      setValue('stringId', '');
+    }
+  }, [watchedStringId, activeStrings, setValue]);
 
   const mutation = useMutation({
     mutationFn: async (data: RacquetFormData) => {
@@ -297,6 +324,7 @@ export default function DropOff() {
                     <Input
                       id="dropInDate"
                       type="date"
+                      min={getTodayLocalYYYYMMDD()}
                       {...register('dropInDate')}
                       aria-invalid={!!errors.dropInDate}
                     />
@@ -341,12 +369,34 @@ export default function DropOff() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <RequiredLabel htmlFor="racquetBrand">Racquet Brand</RequiredLabel>
-                    <Input
-                      id="racquetBrand"
-                      {...register('racquetBrand')}
-                      placeholder="Yonex"
-                      aria-invalid={!!errors.racquetBrand}
-                    />
+                    {brandsError ? (
+                      <Input
+                        id="racquetBrand"
+                        {...register('racquetBrand')}
+                        placeholder="Yonex"
+                        aria-invalid={!!errors.racquetBrand}
+                      />
+                    ) : brandsLoading ? (
+                      <div className="flex h-10 items-center rounded-md border border-input bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                        Loading brands…
+                      </div>
+                    ) : (
+                      <Select
+                        value={watchedBrand || undefined}
+                        onValueChange={(value) => setValue('racquetBrand', value, { shouldValidate: true })}
+                      >
+                        <SelectTrigger id="racquetBrand" aria-invalid={!!errors.racquetBrand}>
+                          <SelectValue placeholder="Select brand" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {brands.map((b) => (
+                            <SelectItem key={b.id} value={b.name}>
+                              {b.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                     {errors.racquetBrand && (
                       <p className="text-sm text-destructive">{errors.racquetBrand.message}</p>
                     )}
@@ -369,18 +419,17 @@ export default function DropOff() {
                   <div className="space-y-2">
                     <RequiredLabel>String Required</RequiredLabel>
                     <Select
-                      value={watch('stringId')}
-                      onValueChange={(value) => setValue('stringId', value)}
+                      value={validStringId || undefined}
+                      onValueChange={(value) => setValue('stringId', value, { shouldValidate: true })}
                     >
                       <SelectTrigger aria-invalid={!!errors.stringId}>
                         <SelectValue placeholder="Select a string" />
                       </SelectTrigger>
                       <SelectContent>
-                        {activeStrings.map((string) => (
-                          <SelectItem key={string.id} value={string.id}>
-                            <span className="font-medium">{string.brand}</span>{' '}
-                            <span>{string.name}</span>{' '}
-                            <span className="text-muted-foreground">({string.gauge})</span>
+                        {activeStrings.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            <span className="font-medium">{s.brand}</span> <span>{s.name}</span>{' '}
+                            <span className="text-muted-foreground">({s.gauge})</span>
                           </SelectItem>
                         ))}
                       </SelectContent>

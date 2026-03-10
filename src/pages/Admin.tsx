@@ -9,11 +9,16 @@ import {
   createString,
   updateString,
   deleteString,
+  fetchBrands,
+  createBrand,
+  updateBrand,
+  deleteBrand,
+  seedStarterStrings,
   markReceivedByFrontDesk,
   recordPayment,
   markPickupCompleted,
 } from '@/lib/api';
-import { RacquetStatus, StringOption, RacquetJob, normalizeStatusKey } from '@/types';
+import { RacquetStatus, StringOption, RacquetJob, RacquetBrand, normalizeStatusKey } from '@/types';
 import { PickupCountdownBadge } from '@/components/PickupCountdownBadge';
 import { Header } from '@/components/Header';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -92,6 +97,13 @@ export default function Admin() {
   const [editingString, setEditingString] = useState<StringOption | null>(null);
   const [stringForm, setStringForm] = useState({ name: '', brand: '', gauge: '', active: true });
 
+  // Racquet brands state
+  const [brandDialogOpen, setBrandDialogOpen] = useState(false);
+  const [editingBrand, setEditingBrand] = useState<RacquetBrand | null>(null);
+  const [brandName, setBrandName] = useState('');
+  const [brandToDelete, setBrandToDelete] = useState<RacquetBrand | null>(null);
+  const [brandDeleteDialogOpen, setBrandDeleteDialogOpen] = useState(false);
+
   // Delete racquet dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [racquetToDelete, setRacquetToDelete] = useState<RacquetJob | null>(null);
@@ -165,6 +177,12 @@ export default function Admin() {
     retry: 1,
   });
 
+  const { data: brands = [], isLoading: brandsLoading } = useQuery({
+    queryKey: ['racquet_brands'],
+    queryFn: fetchBrands,
+    retry: 1,
+  });
+
   // Mutations
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: RacquetStatus }) =>
@@ -204,6 +222,50 @@ export default function Admin() {
       toast.success('String deleted');
     },
     onError: () => toast.error('Failed to delete string'),
+  });
+
+  const seedStarterStringsMutation = useMutation({
+    mutationFn: () => seedStarterStrings(),
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ['strings'] });
+      toast.success(count > 0 ? `Added ${count} starter string(s).` : 'Starter strings already present.');
+    },
+    onError: (e: Error) => toast.error(e?.message ?? 'Failed to seed strings'),
+  });
+
+  const createBrandMutation = useMutation({
+    mutationFn: (name: string) => createBrand(name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['racquet_brands'] });
+      toast.success('Brand added');
+      setBrandDialogOpen(false);
+      setBrandName('');
+      setEditingBrand(null);
+    },
+    onError: (e: Error) => toast.error(e?.message ?? 'Failed to add brand'),
+  });
+
+  const updateBrandMutation = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => updateBrand(id, name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['racquet_brands'] });
+      toast.success('Brand updated');
+      setBrandDialogOpen(false);
+      setBrandName('');
+      setEditingBrand(null);
+    },
+    onError: (e: Error) => toast.error(e?.message ?? 'Failed to update brand'),
+  });
+
+  const deleteBrandMutation = useMutation({
+    mutationFn: (id: string) => deleteBrand(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['racquet_brands'] });
+      toast.success('Brand deleted');
+      setBrandDeleteDialogOpen(false);
+      setBrandToDelete(null);
+    },
+    onError: (e: Error) => toast.error(e?.message ?? 'Failed to delete brand'),
   });
 
   const deleteRacquetMutation = useMutation({
@@ -304,6 +366,36 @@ export default function Admin() {
 
   const handleTabChange = (value: string) => {
     setSearchParams({ tab: value });
+  };
+
+  const openBrandDialog = (brand?: RacquetBrand) => {
+    if (brand) {
+      setEditingBrand(brand);
+      setBrandName(brand.name);
+    } else {
+      setEditingBrand(null);
+      setBrandName('');
+    }
+    setBrandDialogOpen(true);
+  };
+
+  const closeBrandDialog = () => {
+    setBrandDialogOpen(false);
+    setEditingBrand(null);
+    setBrandName('');
+  };
+
+  const handleBrandSubmit = () => {
+    const name = brandName.trim();
+    if (!name) {
+      toast.error('Enter a brand name');
+      return;
+    }
+    if (editingBrand) {
+      updateBrandMutation.mutate({ id: editingBrand.id, name });
+    } else {
+      createBrandMutation.mutate(name);
+    }
   };
 
   // Payment handler (Record Payment dialog)
@@ -795,12 +887,23 @@ export default function Admin() {
                   <EmptyState
                     icon={Settings}
                     title="No strings added yet"
-                    description="Add your first string option to get started with racquet drop-offs."
+                    description="Add your first string option or seed starter strings for the drop-off form."
                   >
-                    <Button onClick={() => openStringDialog()} size="sm" variant="outline" className="gap-2">
-                      <Plus className="w-4 h-4" />
-                      Add Your First String
-                    </Button>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      <Button
+                        onClick={() => seedStarterStringsMutation.mutate()}
+                        disabled={seedStarterStringsMutation.isPending}
+                        size="sm"
+                        variant="outline"
+                        className="gap-2"
+                      >
+                        {seedStarterStringsMutation.isPending ? 'Seeding…' : 'Seed starter strings'}
+                      </Button>
+                      <Button onClick={() => openStringDialog()} size="sm" variant="outline" className="gap-2">
+                        <Plus className="w-4 h-4" />
+                        Add Your First String
+                      </Button>
+                    </div>
                   </EmptyState>
                 ) : (
                   <Table>
@@ -844,6 +947,81 @@ export default function Admin() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => deleteStringMutation.mutate(string.id)}
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10 opacity-60 group-hover:opacity-100"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            </div>
+
+            {/* Racquet Brands */}
+            <div className="card-elevated mt-6">
+              <div className="p-4 border-b flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold">Racquet Brands</h2>
+                  <p className="text-sm text-muted-foreground">Manage brands for the drop-off form</p>
+                </div>
+                <Button onClick={() => openBrandDialog()} size="sm" className="gap-2">
+                  <Plus className="w-4 h-4" />
+                  Add Brand
+                </Button>
+              </div>
+              <div className="overflow-x-auto">
+                {brandsLoading ? (
+                  <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
+                ) : brands.length === 0 ? (
+                  <EmptyState
+                    icon={Settings}
+                    title="No racquet brands yet"
+                    description="Add brands to show in the drop-off form dropdown."
+                  >
+                    <Button onClick={() => openBrandDialog()} size="sm" variant="outline" className="gap-2">
+                      <Plus className="w-4 h-4" />
+                      Add Your First Brand
+                    </Button>
+                  </EmptyState>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {brands.map((brand) => (
+                        <TableRow key={brand.id} className="group">
+                          <TableCell className="font-medium">{brand.name}</TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {brand.created_at
+                              ? format(parseISO(brand.created_at), 'MMM d, yyyy')
+                              : '—'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openBrandDialog(brand)}
+                                className="opacity-60 group-hover:opacity-100"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setBrandToDelete(brand);
+                                  setBrandDeleteDialogOpen(true);
+                                }}
                                 className="text-destructive hover:text-destructive hover:bg-destructive/10 opacity-60 group-hover:opacity-100"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -916,6 +1094,69 @@ export default function Admin() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Racquet Brand Dialog (Add / Edit) */}
+        <Dialog
+          open={brandDialogOpen}
+          onOpenChange={(open) => {
+            setBrandDialogOpen(open);
+            if (!open) {
+              setEditingBrand(null);
+              setBrandName('');
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{editingBrand ? 'Edit Racquet Brand' : 'Add Racquet Brand'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="brandName">Name</Label>
+                <Input
+                  id="brandName"
+                  value={brandName}
+                  onChange={(e) => setBrandName(e.target.value)}
+                  placeholder="e.g., Yonex"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={closeBrandDialog}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleBrandSubmit}
+                disabled={createBrandMutation.isPending || updateBrandMutation.isPending || !brandName.trim()}
+              >
+                {editingBrand ? 'Save' : 'Add'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Brand Confirmation */}
+        <AlertDialog open={brandDeleteDialogOpen} onOpenChange={setBrandDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete brand</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete &quot;{brandToDelete?.name}&quot;? The drop-off form will no longer
+                show this brand in the list.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setBrandToDelete(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => brandToDelete && deleteBrandMutation.mutate(brandToDelete.id)}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteBrandMutation.isPending}
+              >
+                {deleteBrandMutation.isPending ? 'Deleting…' : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Delete Racquet Confirmation Dialog */}
         <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
