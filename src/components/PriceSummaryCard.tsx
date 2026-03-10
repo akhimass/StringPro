@@ -34,7 +34,9 @@ export function PriceSummaryCard({ stringName, addOns, stringExtra }: PriceSumma
         </div>
         {breakdown.stringExtra > 0 && (
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">String selected</span>
+            <span className="text-muted-foreground">
+              {stringName ? stringName : 'Selected string'}
+            </span>
             <span className="font-medium">+{formatPrice(breakdown.stringExtra)}</span>
           </div>
         )}

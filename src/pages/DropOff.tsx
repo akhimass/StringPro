@@ -436,7 +436,23 @@ export default function DropOff() {
                         {activeStrings.map((s) => (
                           <SelectItem key={s.id} value={s.id}>
                             <span className="font-medium">{s.brand}</span> <span>{s.name}</span>{' '}
-                            <span className="text-muted-foreground">({s.gauge})</span>
+                            <span className="text-muted-foreground">
+                              {s.gauge ? `(${s.gauge})` : ''}
+                            </span>{' '}
+                            <span className="text-muted-foreground">
+                              —{' '}
+                              {(() => {
+                                const rawExtra =
+                                  typeof s.extra_cost === 'number' && s.extra_cost >= 0
+                                    ? Number(s.extra_cost)
+                                    : typeof s.price === 'number' && s.price >= 0
+                                    ? Number(s.price)
+                                    : 0;
+                                return rawExtra > 0
+                                  ? `+$${rawExtra.toFixed(2)}`
+                                  : 'Included';
+                              })()}
+                            </span>
                           </SelectItem>
                         ))}
                       </SelectContent>
