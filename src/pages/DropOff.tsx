@@ -481,68 +481,72 @@ export default function DropOff() {
                   Racquet Details
                 </h2>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
+                <div className="grid gap-4 sm:grid-cols-2 items-start">
+                  <div className="space-y-2 min-w-0">
                     <RequiredLabel htmlFor="racquetBrand">Racquet Brand</RequiredLabel>
-                    {brandsError && (
-                      <div className="flex flex-col gap-2">
-                        <p className="text-sm text-destructive">Unable to load brands. Please try again.</p>
-                        <Button type="button" variant="outline" size="sm" onClick={() => refetchBrands()}>
-                          Retry
-                        </Button>
-                        <Input
-                          id="racquetBrand"
-                          {...register('racquetBrand')}
-                          placeholder="Enter brand name"
-                          aria-invalid={!!errors.racquetBrand}
-                        />
-                      </div>
-                    )}
-                    {!brandsError && brandsLoading && (
-                      <div className="flex h-10 items-center rounded-md border border-input bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-                        Loading brands…
-                      </div>
-                    )}
-                    {!brandsError && !brandsLoading && brands.length === 0 && (
-                      <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">No brands available.</p>
-                        <Input
-                          id="racquetBrand"
-                          {...register('racquetBrand')}
-                          placeholder="Enter brand name"
-                          aria-invalid={!!errors.racquetBrand}
-                        />
-                      </div>
-                    )}
-                    {!brandsError && !brandsLoading && brands.length > 0 && (
-                      <Select
-                        value={validBrand || undefined}
-                        onValueChange={(value) => setValue('racquetBrand', value, { shouldValidate: true })}
-                      >
-                        <SelectTrigger id="racquetBrand" aria-invalid={!!errors.racquetBrand}>
-                          <SelectValue placeholder="Select brand" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {brands.map((b) => (
-                            <SelectItem key={b.id} value={b.name}>
-                              {b.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
+                    <div className="min-h-10">
+                      {brandsError && (
+                        <div className="flex flex-col gap-2">
+                          <p className="text-sm text-destructive">Unable to load brands. Please try again.</p>
+                          <Button type="button" variant="outline" size="sm" onClick={() => refetchBrands()}>
+                            Retry
+                          </Button>
+                          <Input
+                            id="racquetBrand"
+                            {...register('racquetBrand')}
+                            placeholder="Enter brand name"
+                            aria-invalid={!!errors.racquetBrand}
+                          />
+                        </div>
+                      )}
+                      {!brandsError && brandsLoading && (
+                        <div className="flex h-10 items-center rounded-md border border-input bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                          Loading brands…
+                        </div>
+                      )}
+                      {!brandsError && !brandsLoading && brands.length === 0 && (
+                        <div className="space-y-2">
+                          <p className="text-sm text-muted-foreground">No brands available.</p>
+                          <Input
+                            id="racquetBrand"
+                            {...register('racquetBrand')}
+                            placeholder="Enter brand name"
+                            aria-invalid={!!errors.racquetBrand}
+                          />
+                        </div>
+                      )}
+                      {!brandsError && !brandsLoading && brands.length > 0 && (
+                        <Select
+                          value={validBrand || undefined}
+                          onValueChange={(value) => setValue('racquetBrand', value, { shouldValidate: true })}
+                        >
+                          <SelectTrigger id="racquetBrand" aria-invalid={!!errors.racquetBrand}>
+                            <SelectValue placeholder="Select brand" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {brands.map((b) => (
+                              <SelectItem key={b.id} value={b.name}>
+                                {b.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
                     {errors.racquetBrand && (
                       <p className="text-sm text-destructive">{errors.racquetBrand.message}</p>
                     )}
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-2 min-w-0">
                     <Label htmlFor="racquetModel">Racquet Model</Label>
-                    <Input
-                      id="racquetModel"
-                      {...register('racquetModel')}
-                      placeholder="Astrox 99"
-                    />
+                    <div className="min-h-10">
+                      <Input
+                        id="racquetModel"
+                        {...register('racquetModel')}
+                        placeholder="Astrox 99"
+                      />
+                    </div>
                     {errors.racquetModel && (
                       <p className="text-sm text-destructive">{errors.racquetModel.message}</p>
                     )}
