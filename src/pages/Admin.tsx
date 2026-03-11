@@ -664,6 +664,7 @@ export default function Admin() {
                         <TableHead>Racquet</TableHead>
                         <TableHead>String</TableHead>
                         <TableHead>Drop-off</TableHead>
+                        <TableHead>Received by</TableHead>
                         <TableHead>Due Status</TableHead>
                         <TableHead>Pickup</TableHead>
                         <TableHead>Tension</TableHead>
@@ -714,6 +715,9 @@ export default function Admin() {
                                   return racquet.drop_in_date;
                                 }
                               })() : 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {racquet.drop_off_by_staff?.trim() || '—'}
                             </TableCell>
                             <TableCell>
                               <DueStatusBadge
