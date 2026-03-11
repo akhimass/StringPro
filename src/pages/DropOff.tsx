@@ -117,6 +117,8 @@ export default function DropOff() {
     staleTime: 30_000,
     gcTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+    refetchOnMount: 'always',
   });
 
   const {
@@ -138,6 +140,8 @@ export default function DropOff() {
     staleTime: 30_000,
     gcTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+    refetchOnMount: 'always',
   });
 
   const {
@@ -428,6 +432,7 @@ export default function DropOff() {
                   verified={emailVerified}
                   onBlur={() => trigger('customerEmail')}
                   register={register('customerEmail')}
+                  required={false}
                 />
               </div>
 

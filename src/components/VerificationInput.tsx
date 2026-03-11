@@ -15,6 +15,7 @@ interface VerificationInputProps {
   verified: boolean;
   onBlur?: () => void;
   register: any;
+  required?: boolean;
 }
 
 export function VerificationInput({
@@ -26,6 +27,7 @@ export function VerificationInput({
   verified,
   onBlur,
   register,
+  required = true,
 }: VerificationInputProps) {
   const [codeSent, setCodeSent] = useState(false);
   const [otpValue, setOtpValue] = useState('');
@@ -38,7 +40,9 @@ export function VerificationInput({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <RequiredLabel htmlFor={id}>{label}</RequiredLabel>
+        <RequiredLabel htmlFor={id} required={required}>
+          {label}
+        </RequiredLabel>
         <VerificationBadge verified={verified} />
       </div>
       <div className="flex gap-2">
