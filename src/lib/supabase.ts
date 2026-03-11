@@ -25,10 +25,16 @@ const SUPABASE_URL =
   (import.meta.env.DEV ? `https://${(import.meta.env.VITE_SUPABASE_PROJECT_ID as string) || 'placeholder'}.supabase.co` : '');
 const SUPABASE_KEY = envKey?.trim() || (import.meta.env.DEV ? '' : '');
 
-export const supabase = createClient<Database>(SUPABASE_URL || 'https://placeholder.supabase.co', SUPABASE_KEY || 'placeholder', {
-  auth: {
-    storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-});
+export const supabase = createClient<Database>(
+  SUPABASE_URL || 'https://placeholder.supabase.co',
+  SUPABASE_KEY || 'placeholder',
+  {
+    auth: {
+      // Use sessionStorage so staff (admin/frontdesk/stringer) must log in again
+      // after closing the browser, but can stay signed in during a single session.
+      storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  }
+);

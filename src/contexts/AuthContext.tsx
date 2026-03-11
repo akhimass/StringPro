@@ -55,6 +55,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchProfile]);
 
   useEffect(() => {
+    // One-time: clear any legacy Supabase auth state that may still be in localStorage
+    // from before we switched to sessionStorage-only sessions.
+    if (typeof window !== 'undefined') {
+      Object.keys(window.localStorage)
+        .filter((key) => key.startsWith('sb-'))
+        .forEach((key) => window.localStorage.removeItem(key));
+    }
+
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
       if (s?.user?.id) {
