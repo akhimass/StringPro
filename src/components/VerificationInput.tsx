@@ -43,7 +43,7 @@ export function VerificationInput({
         <RequiredLabel htmlFor={id} required={required}>
           {label}
         </RequiredLabel>
-        <VerificationBadge verified={verified} />
+        {required && <VerificationBadge verified={verified} />}
       </div>
       <div className="flex gap-2">
         <Input
@@ -55,7 +55,7 @@ export function VerificationInput({
           onBlur={onBlur}
           className="flex-1"
         />
-        {!verified && (
+        {required && !verified && (
           <Button
             type="button"
             variant="outline"
@@ -69,7 +69,7 @@ export function VerificationInput({
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {codeSent && !verified && (
+      {required && codeSent && !verified && (
         <div className="space-y-2 pt-1">
           <p className="text-xs text-muted-foreground">Enter the 6-digit code sent to your {label.toLowerCase()}</p>
           <InputOTP maxLength={6} value={otpValue} onChange={setOtpValue}>
