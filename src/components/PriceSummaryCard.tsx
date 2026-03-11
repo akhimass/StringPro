@@ -50,7 +50,7 @@ export function PriceSummaryCard({ stringName, addOns, stringExtra }: PriceSumma
         )}
         {breakdown.stringerFee > 0 && (
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Stringer A</span>
+            <span className="text-muted-foreground">Ouyang</span>
             <span className="font-medium">+{formatPrice(breakdown.stringerFee)}</span>
           </div>
         )}

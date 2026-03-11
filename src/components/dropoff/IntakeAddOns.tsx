@@ -61,7 +61,7 @@ export function IntakeAddOnsSection({ addOns, onChange }: IntakeAddOnsProps) {
             <SelectContent>
               <SelectItem value="default">Default Stringer</SelectItem>
               <SelectItem value="stringer-a">
-                <span>Stringer A</span>{' '}
+                <span>Ouyang</span>{' '}
                 <span className="text-primary font-medium">+$10</span>
               </SelectItem>
             </SelectContent>

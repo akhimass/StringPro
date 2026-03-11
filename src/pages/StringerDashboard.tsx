@@ -158,7 +158,7 @@ export default function StringerDashboard() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Stringers</SelectItem>
-                <SelectItem value="A">Stringer A</SelectItem>
+                <SelectItem value="A">Ouyang</SelectItem>
                 <SelectItem value="B">Stringer B</SelectItem>
               </SelectContent>
             </Select>
