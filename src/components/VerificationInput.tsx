@@ -85,7 +85,7 @@ export function VerificationInput({
         </div>
       )}
 
-      {!verified && !codeSent && (
+      {required && !verified && !codeSent && (
         <p className="text-xs text-muted-foreground/70">Verification required to submit</p>
       )}
     </div>

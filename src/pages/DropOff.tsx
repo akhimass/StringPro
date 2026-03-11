@@ -35,7 +35,11 @@ import {
 import { toast } from 'sonner';
 import { computeAmountDue } from '@/lib/pricing';
 import { Link } from 'react-router-dom';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, CalendarIcon } from 'lucide-react';
+import { format, startOfDay, isBefore } from 'date-fns';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
 
 function getTodayLocalYYYYMMDD(): string {
   const d = new Date();
@@ -173,6 +177,7 @@ export default function DropOff() {
 
   const watchedStringId = watch('stringId');
   const watchedBrand = watch('racquetBrand');
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const activeStrings = useMemo(() => strings.filter((s) => s.active), [strings]);
   const validStringId =
@@ -396,13 +401,47 @@ export default function DropOff() {
 
                   <div className="space-y-2">
                     <RequiredLabel htmlFor="dropInDate">Drop-off Date</RequiredLabel>
-                    <Input
-                      id="dropInDate"
-                      type="date"
-                      min={getTodayLocalYYYYMMDD()}
-                      {...register('dropInDate')}
-                      aria-invalid={!!errors.dropInDate}
-                    />
+                    <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          id="dropInDate"
+                          type="button"
+                          variant="outline"
+                          className={cn(
+                            'w-full justify-start text-left font-normal h-10',
+                            !watch('dropInDate') && 'text-muted-foreground'
+                          )}
+                          aria-invalid={!!errors.dropInDate}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {watch('dropInDate')
+                            ? format(new Date(watch('dropInDate') + 'T12:00:00'), 'PPP')
+                            : 'Pick a date'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={
+                            watch('dropInDate')
+                              ? new Date(watch('dropInDate') + 'T12:00:00')
+                              : undefined
+                          }
+                          onSelect={(date) => {
+                            if (date) {
+                              setValue('dropInDate', format(date, 'yyyy-MM-dd'), {
+                                shouldValidate: true,
+                              });
+                              setDatePickerOpen(false);
+                            }
+                          }}
+                          disabled={(date) =>
+                            isBefore(startOfDay(date), startOfDay(new Date()))
+                          }
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
                     {errors.dropInDate && (
                       <p className="text-sm text-destructive">{errors.dropInDate.message}</p>
                     )}
