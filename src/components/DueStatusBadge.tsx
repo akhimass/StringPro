@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { normalizeStatusKey } from '@/types';
 
 interface DueStatusBadgeProps {
   pickupDeadline: string | null;
@@ -44,8 +45,8 @@ const dueConfig: Record<DueLevel, DueConfig> = {
 };
 
 export function DueStatusBadge({ pickupDeadline, status }: DueStatusBadgeProps) {
-  // Don't show due status for delivered/completed items
-  if (status === 'delivered' || status === 'cancelled' || !pickupDeadline) {
+  const normalized = normalizeStatusKey(status);
+  if (normalized === 'pickup_completed' || normalized === 'cancelled' || !pickupDeadline) {
     return null;
   }
 
