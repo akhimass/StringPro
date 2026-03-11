@@ -74,9 +74,12 @@ export default function FrontDeskDashboard() {
   const recordPaymentMutation = useMutation({
     mutationFn: ({ id, amount, staffName, paymentMethod }: { id: string; amount: number; staffName: string; paymentMethod?: string | null }) =>
       recordPayment(id, amount, staffName, paymentMethod),
-    onSuccess: (_, v) => {
-      queryClient.invalidateQueries({ queryKey: ['racquets'] });
-      toast.success(`Payment of $${v.amount.toFixed(2)} recorded`);
+    onSuccess: async (_, v) => {
+      await queryClient.invalidateQueries({ queryKey: ['racquets'] });
+      await queryClient.refetchQueries({ queryKey: ['racquets'] });
+      setPayDialogOpen(false);
+      setPayRacquet(null);
+      toast.success(`Payment of $${v.amount.toFixed(2)} recorded and logged`);
     },
     onError: (err: Error) => toast.error(err?.message ?? 'Failed to record payment'),
   });
@@ -98,9 +101,7 @@ export default function FrontDeskDashboard() {
 
   const handleRecordPayment = (amount: number, staffName: string, paymentMethod?: string | null) => {
     if (!payRacquet) return;
-    recordPaymentMutation.mutate({ id: payRacquet.id, amount, staffName, paymentMethod }, {
-      onSuccess: () => { setPayDialogOpen(false); setPayRacquet(null); },
-    });
+    recordPaymentMutation.mutate({ id: payRacquet.id, amount, staffName, paymentMethod });
   };
 
   const handleSendReminderConfirm = async () => {
@@ -204,7 +205,6 @@ export default function FrontDeskDashboard() {
                     <TableHead>Racquet</TableHead>
                     <TableHead>Drop-off</TableHead>
                     <TableHead>Pickup Timer</TableHead>
-                    <TableHead>Amount Due</TableHead>
                     <TableHead>Paid</TableHead>
                     <TableHead>Balance</TableHead>
                     <TableHead>Payment</TableHead>
@@ -242,9 +242,6 @@ export default function FrontDeskDashboard() {
                         </TableCell>
                         <TableCell>
                           <PickupCountdownBadge readyForPickupAt={job.ready_for_pickup_at ?? null} status={job.status} />
-                        </TableCell>
-                        <TableCell className="text-sm font-medium">
-                          ${amountDue.toFixed(2)}
                         </TableCell>
                         <TableCell className="text-sm">
                           ${amountPaid.toFixed(2)}

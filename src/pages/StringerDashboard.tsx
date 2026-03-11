@@ -9,6 +9,7 @@ import { RacquetJob, RacquetStatus, normalizeStatusKey } from '@/types';
 import { Header } from '@/components/Header';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
+import { PaymentStatusBadge } from '@/components/admin/PaymentStatusBadge';
 import { AttachmentsDialog } from '@/components/admin/AttachmentsDialog';
 import { PhotoUploadSection } from '@/components/dropoff/PhotoUploadSection';
 import { Button } from '@/components/ui/button';
@@ -184,6 +185,8 @@ export default function StringerDashboard() {
                     <TableHead>Tension</TableHead>
                     <TableHead>Service</TableHead>
                     <TableHead>Stringer</TableHead>
+                    <TableHead>Balance</TableHead>
+                    <TableHead>Payment</TableHead>
                     <TableHead>Notes</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -192,6 +195,9 @@ export default function StringerDashboard() {
                 <TableBody>
                   {stringerJobs.map((job) => {
                     const attachmentCount = job.job_attachments?.length ?? 0;
+                    const amountDue = Number(job.amount_due) || 0;
+                    const amountPaid = Number(job.amount_paid) || 0;
+                    const balanceDue = Math.max(0, amountDue - amountPaid);
                     return (
                       <TableRow key={job.id} className="group">
                         <TableCell className="font-mono text-sm font-medium whitespace-nowrap">
@@ -220,6 +226,16 @@ export default function StringerDashboard() {
                           </span>
                         </TableCell>
                         <TableCell className="text-sm">{job.assigned_stringer || '—'}</TableCell>
+                        <TableCell className="text-sm">
+                          {balanceDue > 0 ? (
+                            <span className="text-status-pending font-medium">${balanceDue.toFixed(2)}</span>
+                          ) : (
+                            <span className="text-muted-foreground">$0.00</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <PaymentStatusBadge paymentStatus={job.payment_status as 'unpaid' | 'partial' | 'paid'} />
+                        </TableCell>
                         <TableCell className="text-sm text-muted-foreground max-w-[120px] truncate">
                           {job.string_power || '—'}
                         </TableCell>

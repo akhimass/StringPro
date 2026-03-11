@@ -92,10 +92,6 @@ export function RecordPaymentDialog({
               <span className="font-medium">{racquet.racquet_type || 'N/A'}</span>
             </div>
             <div className="flex justify-between text-sm border-t border-border pt-2 mt-2">
-              <span className="text-muted-foreground">Amount Due</span>
-              <span className="font-medium">${amountDue.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Amount Paid</span>
               <span className="font-medium">${amountPaid.toFixed(2)}</span>
             </div>

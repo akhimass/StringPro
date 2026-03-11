@@ -60,7 +60,7 @@ export function DropOffConfirmation({
               <DollarSign className="w-4 h-4 text-accent-foreground" />
             </div>
             <div>
-              <p className="text-sm font-medium">Amount Due</p>
+              <p className="text-sm font-medium">Total</p>
               <p className="text-lg font-semibold text-primary">${amountDue.toFixed(2)}</p>
             </div>
           </div>

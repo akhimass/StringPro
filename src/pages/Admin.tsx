@@ -157,12 +157,15 @@ export default function Admin() {
       staffName: string;
       paymentMethod?: string | null;
     }) => recordPayment(id, amount, staffName, paymentMethod),
-    onSuccess: (_, v) => {
-      queryClient.invalidateQueries({ queryKey: ['racquets'] });
+    onSuccess: async (_, v) => {
+      await queryClient.invalidateQueries({ queryKey: ['racquets'] });
+      await queryClient.refetchQueries({ queryKey: ['racquets'] });
+      setPayDialogOpen(false);
+      setPayRacquet(null);
       toast.success(
         v.amount > 0
-          ? `Payment of $${v.amount.toFixed(2)} recorded`
-          : 'Payment recorded'
+          ? `Payment of $${v.amount.toFixed(2)} recorded and logged`
+          : 'Payment recorded and logged'
       );
     },
     onError: (err: Error) => {
@@ -422,27 +425,19 @@ export default function Admin() {
     }
   };
 
-  // Payment handler (Record Payment dialog)
+  // Payment handler (Record Payment dialog) — dialog closes and state clears in mutation onSuccess
   const handleRecordPayment = (
     amount: number,
     staffName: string,
     paymentMethod?: string | null
   ) => {
     if (!payRacquet) return;
-    recordPaymentMutation.mutate(
-      {
-        id: payRacquet.id,
-        amount,
-        staffName,
-        paymentMethod,
-      },
-      {
-        onSuccess: () => {
-          setPayDialogOpen(false);
-          setPayRacquet(null);
-        },
-      }
-    );
+    recordPaymentMutation.mutate({
+      id: payRacquet.id,
+      amount,
+      staffName,
+      paymentMethod,
+    });
   };
 
   // Front desk receive handler
@@ -680,23 +675,20 @@ export default function Admin() {
                                 {racquet.assigned_stringer ? ` (${racquet.assigned_stringer})` : ''}
                               </span>
                             </TableCell>
-                            {/* Amount Due + Paid + Balance */}
+                            {/* Paid + Balance */}
                             <TableCell className="text-sm">
                               <div className="space-y-0.5">
-                                <p className="font-medium">
-                                  {typeof racquet.amount_due === 'number'
-                                    ? `$${amountDue.toFixed(2)}`
-                                    : '—'}
-                                </p>
                                 {amountPaid > 0 && (
                                   <p className="text-[10px] text-muted-foreground">
                                     Paid: ${amountPaid.toFixed(2)}
                                   </p>
                                 )}
-                                {balanceDue > 0 && (
-                                  <p className="text-[10px] text-status-pending">
+                                {balanceDue > 0 ? (
+                                  <p className="font-medium text-status-pending">
                                     Bal: ${balanceDue.toFixed(2)}
                                   </p>
+                                ) : (
+                                  <p className="font-medium text-muted-foreground">$0.00</p>
                                 )}
                               </div>
                             </TableCell>
