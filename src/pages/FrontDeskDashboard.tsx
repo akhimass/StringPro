@@ -204,6 +204,7 @@ export default function FrontDeskDashboard() {
                     <TableHead>Customer</TableHead>
                     <TableHead>Racquet</TableHead>
                     <TableHead>Drop-off</TableHead>
+                    <TableHead>Received by</TableHead>
                     <TableHead>Pickup Timer</TableHead>
                     <TableHead>Paid</TableHead>
                     <TableHead>Balance</TableHead>
@@ -239,6 +240,9 @@ export default function FrontDeskDashboard() {
                         </TableCell>
                         <TableCell className="text-sm">
                           {job.drop_in_date ? (() => { try { return format(parseISO(job.drop_in_date), 'MMM d, yyyy'); } catch { return job.drop_in_date; } })() : 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {job.drop_off_by_staff?.trim() || '—'}
                         </TableCell>
                         <TableCell>
                           <PickupCountdownBadge readyForPickupAt={job.ready_for_pickup_at ?? null} status={job.status} />
