@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { StringOption, RacquetJob, RacquetFormData, RacquetStatus, IntakeAddOns, RacquetBrand } from '@/types';
+import { StringOption, RacquetJob, RacquetFormData, RacquetStatus, IntakeAddOns, RacquetBrand, FrontDeskStaff } from '@/types';
 import { normalizeUSPhone } from '@/lib/validation';
 import { computeAmountDue } from '@/lib/pricing';
 
@@ -36,6 +36,42 @@ export const updateBrand = async (id: string, name: string): Promise<RacquetBran
 
 export const deleteBrand = async (id: string): Promise<void> => {
   const { error } = await supabase.from('racquet_brands').delete().eq('id', id);
+  if (error) throw error;
+};
+
+// Front desk staff API (for drop-off form and admin settings)
+export const fetchFrontDeskStaff = async (): Promise<FrontDeskStaff[]> => {
+  const { data, error } = await supabase
+    .from('front_desk_staff' as any)
+    .select('*')
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return (data || []) as FrontDeskStaff[];
+};
+
+export const createFrontDeskStaff = async (name: string): Promise<FrontDeskStaff> => {
+  const { data, error } = await supabase
+    .from('front_desk_staff' as any)
+    .insert({ name: name.trim() })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as FrontDeskStaff;
+};
+
+export const updateFrontDeskStaff = async (id: string, name: string): Promise<FrontDeskStaff> => {
+  const { data, error } = await supabase
+    .from('front_desk_staff' as any)
+    .update({ name: name.trim() })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as FrontDeskStaff;
+};
+
+export const deleteFrontDeskStaff = async (id: string): Promise<void> => {
+  const { error } = await supabase.from('front_desk_staff' as any).delete().eq('id', id);
   if (error) throw error;
 };
 
@@ -196,6 +232,7 @@ export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJ
     email,
     drop_in_date: dropIn,
     pickup_deadline: pickupDeadline,
+    drop_off_by_staff: formData.dropOffByStaff?.trim() || null,
     racquet_type: formData.racquetModel && formData.racquetModel.trim()
       ? `${formData.racquetBrand} ${formData.racquetModel.trim()}`
       : formData.racquetBrand,

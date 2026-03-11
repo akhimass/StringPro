@@ -1,13 +1,27 @@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { RequiredLabel } from '@/components/RequiredLabel';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import type { FrontDeskStaff } from '@/types';
 
 interface WaiverSectionProps {
   termsAccepted: boolean;
   onTermsChange: (checked: boolean) => void;
   signature: string;
   onSignatureChange: (value: string) => void;
+  frontDeskStaff: FrontDeskStaff[];
+  dropOffByStaff: string;
+  onDropOffByStaffChange: (value: string) => void;
+  frontDeskStaffLoading?: boolean;
   termsError?: string;
   signatureError?: string;
+  dropOffByStaffError?: string;
 }
 
 const WAIVER_TEXT = `WAIVER & RELEASE OF LIABILITY
@@ -31,19 +45,47 @@ export function WaiverSection({
   onTermsChange,
   signature,
   onSignatureChange,
+  frontDeskStaff,
+  dropOffByStaff,
+  onDropOffByStaffChange,
+  frontDeskStaffLoading = false,
   termsError,
   signatureError,
+  dropOffByStaffError,
 }: WaiverSectionProps) {
   return (
     <div className="card-elevated p-6 space-y-4">
       <h2 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-        Waiver & Terms
+        Waiver & Terms – Drop-Off Confirmation
       </h2>
 
       <div className="rounded-md border border-border/60 bg-muted/20 max-h-48 overflow-y-auto p-4">
         <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed">
           {WAIVER_TEXT}
         </pre>
+      </div>
+
+      <div className="space-y-2">
+        <RequiredLabel htmlFor="dropOffByStaff">Front desk person</RequiredLabel>
+        <Select
+          value={dropOffByStaff || undefined}
+          onValueChange={onDropOffByStaffChange}
+          disabled={frontDeskStaffLoading}
+        >
+          <SelectTrigger id="dropOffByStaff" aria-invalid={!!dropOffByStaffError}>
+            <SelectValue placeholder={frontDeskStaffLoading ? 'Loading…' : 'Select who is receiving this drop-off'} />
+          </SelectTrigger>
+          <SelectContent>
+            {frontDeskStaff.map((s) => (
+              <SelectItem key={s.id} value={s.name}>
+                {s.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {dropOffByStaffError && (
+          <p className="text-sm text-destructive">{dropOffByStaffError}</p>
+        )}
       </div>
 
       <div className="flex items-start gap-3">

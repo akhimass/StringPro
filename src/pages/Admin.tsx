@@ -13,12 +13,16 @@ import {
   createBrand,
   updateBrand,
   deleteBrand,
+  fetchFrontDeskStaff,
+  createFrontDeskStaff,
+  updateFrontDeskStaff,
+  deleteFrontDeskStaff,
   seedStarterStrings,
   markReceivedByFrontDesk,
   recordPayment,
   markPickupCompleted,
 } from '@/lib/api';
-import { RacquetStatus, StringOption, RacquetJob, RacquetBrand, normalizeStatusKey } from '@/types';
+import { RacquetStatus, StringOption, RacquetJob, RacquetBrand, FrontDeskStaff, normalizeStatusKey } from '@/types';
 import { PickupCountdownBadge } from '@/components/PickupCountdownBadge';
 import { Header } from '@/components/Header';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -110,6 +114,13 @@ export default function Admin() {
   const [brandToDelete, setBrandToDelete] = useState<RacquetBrand | null>(null);
   const [brandDeleteDialogOpen, setBrandDeleteDialogOpen] = useState(false);
 
+  // Front desk staff dialog state
+  const [staffDialogOpen, setStaffDialogOpen] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<FrontDeskStaff | null>(null);
+  const [staffName, setStaffName] = useState('');
+  const [staffToDelete, setStaffToDelete] = useState<FrontDeskStaff | null>(null);
+  const [staffDeleteDialogOpen, setStaffDeleteDialogOpen] = useState(false);
+
   // Delete racquet dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [racquetToDelete, setRacquetToDelete] = useState<RacquetJob | null>(null);
@@ -189,6 +200,12 @@ export default function Admin() {
   const { data: brands = [], isLoading: brandsLoading } = useQuery({
     queryKey: ['racquet_brands'],
     queryFn: fetchBrands,
+    retry: 1,
+  });
+
+  const { data: frontDeskStaffList = [], isLoading: frontDeskStaffLoading } = useQuery({
+    queryKey: ['front_desk_staff'],
+    queryFn: fetchFrontDeskStaff,
     retry: 1,
   });
 
@@ -275,6 +292,41 @@ export default function Admin() {
       setBrandToDelete(null);
     },
     onError: (e: Error) => toast.error(e?.message ?? 'Failed to delete brand'),
+  });
+
+  const createStaffMutation = useMutation({
+    mutationFn: (name: string) => createFrontDeskStaff(name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['front_desk_staff'] });
+      toast.success('Front desk staff added');
+      setStaffDialogOpen(false);
+      setStaffName('');
+      setEditingStaff(null);
+    },
+    onError: (e: Error) => toast.error(e?.message ?? 'Failed to add front desk staff'),
+  });
+
+  const updateStaffMutation = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => updateFrontDeskStaff(id, name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['front_desk_staff'] });
+      toast.success('Front desk staff updated');
+      setStaffDialogOpen(false);
+      setStaffName('');
+      setEditingStaff(null);
+    },
+    onError: (e: Error) => toast.error(e?.message ?? 'Failed to update front desk staff'),
+  });
+
+  const deleteStaffMutation = useMutation({
+    mutationFn: (id: string) => deleteFrontDeskStaff(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['front_desk_staff'] });
+      toast.success('Front desk staff removed');
+      setStaffDeleteDialogOpen(false);
+      setStaffToDelete(null);
+    },
+    onError: (e: Error) => toast.error(e?.message ?? 'Failed to remove front desk staff'),
   });
 
   const deleteRacquetMutation = useMutation({
@@ -422,6 +474,36 @@ export default function Admin() {
       updateBrandMutation.mutate({ id: editingBrand.id, name });
     } else {
       createBrandMutation.mutate(name);
+    }
+  };
+
+  const openStaffDialog = (staff?: FrontDeskStaff) => {
+    if (staff) {
+      setEditingStaff(staff);
+      setStaffName(staff.name);
+    } else {
+      setEditingStaff(null);
+      setStaffName('');
+    }
+    setStaffDialogOpen(true);
+  };
+
+  const closeStaffDialog = () => {
+    setStaffDialogOpen(false);
+    setEditingStaff(null);
+    setStaffName('');
+  };
+
+  const handleStaffSubmit = () => {
+    const name = staffName.trim();
+    if (!name) {
+      toast.error('Enter a name');
+      return;
+    }
+    if (editingStaff) {
+      updateStaffMutation.mutate({ id: editingStaff.id, name });
+    } else {
+      createStaffMutation.mutate(name);
     }
   };
 
@@ -1059,6 +1141,81 @@ export default function Admin() {
                 )}
               </div>
             </div>
+
+            {/* Front Desk Staff */}
+            <div className="card-elevated mt-6">
+              <div className="p-4 border-b flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold">Front Desk Staff</h2>
+                  <p className="text-sm text-muted-foreground">Staff who can receive drop-offs (waiver section)</p>
+                </div>
+                <Button onClick={() => openStaffDialog()} size="sm" className="gap-2">
+                  <Plus className="w-4 h-4" />
+                  Add Staff
+                </Button>
+              </div>
+              <div className="overflow-x-auto">
+                {frontDeskStaffLoading ? (
+                  <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
+                ) : frontDeskStaffList.length === 0 ? (
+                  <EmptyState
+                    icon={Settings}
+                    title="No front desk staff yet"
+                    description="Add staff names to show in the drop-off waiver section."
+                  >
+                    <Button onClick={() => openStaffDialog()} size="sm" variant="outline" className="gap-2">
+                      <Plus className="w-4 h-4" />
+                      Add Your First Staff
+                    </Button>
+                  </EmptyState>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {frontDeskStaffList.map((staff) => (
+                        <TableRow key={staff.id} className="group">
+                          <TableCell className="font-medium">{staff.name}</TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {staff.created_at
+                              ? format(parseISO(staff.created_at), 'MMM d, yyyy')
+                              : '—'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openStaffDialog(staff)}
+                                className="opacity-60 group-hover:opacity-100"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setStaffToDelete(staff);
+                                  setStaffDeleteDialogOpen(true);
+                                }}
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10 opacity-60 group-hover:opacity-100"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
 
@@ -1189,6 +1346,69 @@ export default function Admin() {
                 disabled={deleteBrandMutation.isPending}
               >
                 {deleteBrandMutation.isPending ? 'Deleting…' : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Front Desk Staff Dialog (Add / Edit) */}
+        <Dialog
+          open={staffDialogOpen}
+          onOpenChange={(open) => {
+            setStaffDialogOpen(open);
+            if (!open) {
+              setEditingStaff(null);
+              setStaffName('');
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{editingStaff ? 'Edit Front Desk Staff' : 'Add Front Desk Staff'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="staffName">Name</Label>
+                <Input
+                  id="staffName"
+                  value={staffName}
+                  onChange={(e) => setStaffName(e.target.value)}
+                  placeholder="e.g., Manager, Front Desk Member A"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={closeStaffDialog}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleStaffSubmit}
+                disabled={createStaffMutation.isPending || updateStaffMutation.isPending || !staffName.trim()}
+              >
+                {editingStaff ? 'Save' : 'Add'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Front Desk Staff Confirmation */}
+        <AlertDialog open={staffDeleteDialogOpen} onOpenChange={setStaffDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove front desk staff</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to remove &quot;{staffToDelete?.name}&quot;? They will no longer appear in the
+                drop-off waiver dropdown. Existing jobs will keep the recorded name.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setStaffToDelete(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => staffToDelete && deleteStaffMutation.mutate(staffToDelete.id)}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteStaffMutation.isPending}
+              >
+                {deleteStaffMutation.isPending ? 'Removing…' : 'Remove'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

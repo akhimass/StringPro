@@ -4,6 +4,12 @@ export interface RacquetBrand {
   created_at?: string | null;
 }
 
+export interface FrontDeskStaff {
+  id: string;
+  name: string;
+  created_at?: string | null;
+}
+
 export interface StringOption {
   id: string;
   name: string;
@@ -47,6 +53,7 @@ export interface RacquetJob {
   tension_override_by?: string | null;
   tension_override_reason?: string | null;
   ready_for_pickup_at?: string | null;
+  drop_off_by_staff?: string | null;
   created_at: string;
   updated_at: string;
   // Joined data
@@ -204,6 +211,7 @@ export interface RacquetFormData {
   notes: string;
   dropInDate?: string;
   pickupDeadline?: string;
+  dropOffByStaff?: string;
   termsAccepted?: boolean;
   addOns?: IntakeAddOns;
 }

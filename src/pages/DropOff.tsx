@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMemo, useEffect } from 'react';
 import { normalizeUSPhone, isValidEmail } from '@/lib/validation';
-import { fetchStrings, fetchBrands, createRacquet, uploadMultipleJobPhotos } from '@/lib/api';
+import { fetchStrings, fetchBrands, fetchFrontDeskStaff, createRacquet, uploadMultipleJobPhotos } from '@/lib/api';
 import { supabaseConfigError } from '@/lib/supabase';
 import { RacquetFormData, IntakeAddOns } from '@/types';
 import { Header } from '@/components/Header';
@@ -76,6 +76,7 @@ const formSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format')
     .refine((val) => val >= getTodayLocalYYYYMMDD(), { message: 'Drop-off date cannot be in the past.' }),
+  dropOffByStaff: z.string().min(1, 'Front desk person is required'),
   termsAccepted: z.boolean().refine((v) => v === true, { message: 'You must accept the waiver & terms.' }),
   signature: z.string().min(1, 'Signature is required').max(100),
 });
@@ -149,6 +150,29 @@ export default function DropOff() {
   });
 
   const {
+    data: frontDeskStaff = [],
+    isLoading: frontDeskStaffLoading,
+    isError: frontDeskStaffError,
+    refetch: refetchFrontDeskStaff,
+  } = useQuery({
+    queryKey: ['front_desk_staff'],
+    queryFn: async () => {
+      try {
+        return await fetchFrontDeskStaff();
+      } catch (err) {
+        if (import.meta.env.DEV && err) console.error('[StringPro] fetchFrontDeskStaff error', err);
+        throw err;
+      }
+    },
+    retry: 2,
+    staleTime: 30_000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+    refetchOnMount: 'always',
+  });
+
+  const {
     register,
     handleSubmit,
     setFocus,
@@ -170,6 +194,7 @@ export default function DropOff() {
       tension: '',
       notes: '',
       dropInDate: getTodayLocalYYYYMMDD(),
+      dropOffByStaff: '',
       termsAccepted: false,
       signature: '',
     },
@@ -276,6 +301,7 @@ export default function DropOff() {
       customerEmail: normalizedEmail,
       dropInDate,
       pickupDeadline,
+      dropOffByStaff: data.dropOffByStaff?.trim() || '',
       termsAccepted: data.termsAccepted,
       addOns,
     };
@@ -654,15 +680,35 @@ export default function DropOff() {
                 stringExtra={selectedStringExtra}
               />
 
-              {/* Waiver & Terms */}
-              <WaiverSection
-                termsAccepted={watch('termsAccepted')}
-                onTermsChange={(checked) => setValue('termsAccepted', checked, { shouldValidate: true })}
-                signature={watch('signature')}
-                onSignatureChange={(val) => setValue('signature', val, { shouldValidate: true })}
-                termsError={errors.termsAccepted?.message}
-                signatureError={errors.signature?.message}
-              />
+              {/* Waiver & Terms – Drop-Off Confirmation */}
+              {frontDeskStaffError && (
+                <div className="card-elevated p-4 flex flex-col gap-2">
+                  <p className="text-sm text-destructive">Unable to load front desk staff. Please try again.</p>
+                  <Button type="button" variant="outline" size="sm" onClick={() => refetchFrontDeskStaff()}>
+                    Retry
+                  </Button>
+                </div>
+              )}
+              {!frontDeskStaffError && frontDeskStaff.length === 0 && !frontDeskStaffLoading && (
+                <div className="card-elevated p-4">
+                  <p className="text-sm text-muted-foreground">No front desk staff options. Contact an administrator.</p>
+                </div>
+              )}
+              {!frontDeskStaffError && (frontDeskStaffLoading || frontDeskStaff.length > 0) && (
+                <WaiverSection
+                  termsAccepted={watch('termsAccepted')}
+                  onTermsChange={(checked) => setValue('termsAccepted', checked, { shouldValidate: true })}
+                  signature={watch('signature')}
+                  onSignatureChange={(val) => setValue('signature', val, { shouldValidate: true })}
+                  frontDeskStaff={frontDeskStaff}
+                  dropOffByStaff={watch('dropOffByStaff')}
+                  onDropOffByStaffChange={(val) => setValue('dropOffByStaff', val, { shouldValidate: true })}
+                  frontDeskStaffLoading={frontDeskStaffLoading}
+                  termsError={errors.termsAccepted?.message}
+                  signatureError={errors.signature?.message}
+                  dropOffByStaffError={errors.dropOffByStaff?.message}
+                />
+              )}
 
               {/* Submit */}
               <Tooltip>
