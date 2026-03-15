@@ -225,10 +225,10 @@ export default function DropOff() {
   const watchedBrand = watch('racquetBrand');
   const [datePickerOpen, setDatePickerOpen] = useState(false);
 
-  const activeStrings = useMemo(() => strings.filter((s) => s.active), [strings]);
+  const activeStrings = useMemo(() => (Array.isArray(strings) ? strings : []).filter((s) => s.active), [strings]);
   const validStringId =
     watchedStringId && activeStrings.some((s) => s.id === watchedStringId) ? watchedStringId : '';
-  const validBrand = watchedBrand && brands.some((b) => b.name === watchedBrand) ? watchedBrand : '';
+  const validBrand = watchedBrand && Array.isArray(brands) && brands.some((b) => b.name === watchedBrand) ? watchedBrand : '';
 
   // Defensive: clear select values when they are not in loaded options
   useEffect(() => {
@@ -240,7 +240,7 @@ export default function DropOff() {
   }, [watchedStringId, activeStrings, setValue]);
 
   useEffect(() => {
-    if (!watchedBrand) return;
+    if (!watchedBrand || !Array.isArray(brands)) return;
     const exists = brands.some((b) => b.name === watchedBrand);
     if (!exists && brands.length > 0) {
       setValue('racquetBrand', '');
@@ -694,7 +694,7 @@ export default function DropOff() {
               <IntakeAddOnsSection
                 addOns={addOns}
                 onChange={setAddOns}
-                stringers={stringers}
+                stringers={Array.isArray(stringers) ? stringers : []}
                 stringersLoading={stringersLoading}
               />
 
@@ -703,7 +703,7 @@ export default function DropOff() {
                 stringName={selectedStringLabel}
                 addOns={addOns}
                 stringExtra={selectedStringExtra}
-                stringerName={addOns.stringerId ? stringers.find((s) => s.id === addOns.stringerId)?.name : null}
+                stringerName={addOns.stringerId && Array.isArray(stringers) ? (stringers.find((s) => s.id === addOns.stringerId)?.name ?? null) : null}
               />
 
               {/* Waiver & Terms – Drop-Off Confirmation */}

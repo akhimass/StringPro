@@ -178,7 +178,7 @@ export default function StringerDashboard() {
           <p className="text-muted-foreground">Jobs assigned for stringing. Mark completed when done.</p>
         </div>
 
-        <div className="card-elevated min-w-0">
+        <div className="card-elevated">
           <div className="p-4 border-b flex flex-col sm:flex-row gap-4">
             <Input
               placeholder="Search by name, racquet, or ticket..."
@@ -216,7 +216,7 @@ export default function StringerDashboard() {
             </Select>
           </div>
 
-          <div className="table-scroll-viewport">
+          <div className="min-w-0 max-w-full overflow-x-auto">
             {isLoading ? (
               <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
             ) : stringerJobs.length === 0 ? (

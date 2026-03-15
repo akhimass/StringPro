@@ -740,7 +740,7 @@ export default function Admin() {
           </TabsList>
 
           <TabsContent value="racquets" className="animate-fade-in">
-            <div className="card-elevated min-w-0">
+            <div className="card-elevated">
               <div className="p-4 border-b flex flex-col sm:flex-row gap-4">
                 <Input
                   placeholder="Search by name, racquet, or ticket..."
@@ -780,7 +780,7 @@ export default function Admin() {
                 </Select>
               </div>
 
-              <div className="table-scroll-viewport">
+              <div className="min-w-0 max-w-full overflow-x-auto">
                 {racquetsLoading ? (
                   <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
                 ) : filteredRacquets.length === 0 ? (
@@ -899,11 +899,11 @@ export default function Admin() {
                             </TableCell>
                             <TableCell className="text-sm">
                               <Select
-                                value={racquet.stringer_id ?? ''}
+                                value={racquet.stringer_id ?? 'default'}
                                 onValueChange={(v) =>
                                   updateStringerMutationForJob.mutate({
                                     id: racquet.id,
-                                    stringerId: v === '' ? null : v,
+                                    stringerId: v === 'default' ? null : v,
                                   })
                                 }
                                 disabled={updateStringerMutationForJob.isPending}
@@ -912,7 +912,7 @@ export default function Admin() {
                                   <SelectValue placeholder="Default" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="">Default</SelectItem>
+                                  <SelectItem value="default">Default</SelectItem>
                                   {stringersList.map((s) => (
                                     <SelectItem key={s.id} value={s.id}>
                                       {s.name}
@@ -1130,7 +1130,7 @@ export default function Admin() {
           </TabsContent>
 
           <TabsContent value="settings" className="animate-fade-in">
-            <div className="card-elevated min-w-0">
+            <div className="card-elevated">
               <div className="p-4 border-b flex items-center justify-between">
                 <div>
                   <h2 className="font-semibold">Strings</h2>
@@ -1142,7 +1142,7 @@ export default function Admin() {
                 </Button>
               </div>
 
-              <div className="table-scroll-viewport">
+              <div className="min-w-0 max-w-full overflow-x-auto">
                 {stringsLoading ? (
                   <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
                 ) : strings.length === 0 ? (
@@ -1232,7 +1232,7 @@ export default function Admin() {
             </div>
 
             {/* Racquet Brands */}
-            <div className="card-elevated mt-6 min-w-0">
+            <div className="card-elevated mt-6">
               <div className="p-4 border-b flex items-center justify-between">
                 <div>
                   <h2 className="font-semibold">Racquet Brands</h2>
@@ -1243,7 +1243,7 @@ export default function Admin() {
                   Add Brand
                 </Button>
               </div>
-              <div className="table-scroll-viewport">
+              <div className="min-w-0 max-w-full overflow-x-auto">
                 {brandsLoading ? (
                   <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
                 ) : brands.length === 0 ? (
@@ -1307,7 +1307,7 @@ export default function Admin() {
             </div>
 
             {/* Front Desk Staff */}
-            <div className="card-elevated mt-6 min-w-0">
+            <div className="card-elevated mt-6">
               <div className="p-4 border-b flex items-center justify-between">
                 <div>
                   <h2 className="font-semibold">Front Desk Staff</h2>
@@ -1318,7 +1318,7 @@ export default function Admin() {
                   Add Staff
                 </Button>
               </div>
-              <div className="table-scroll-viewport">
+              <div className="min-w-0 max-w-full overflow-x-auto">
                 {frontDeskStaffLoading ? (
                   <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
                 ) : frontDeskStaffList.length === 0 ? (
@@ -1382,7 +1382,7 @@ export default function Admin() {
             </div>
 
             {/* Stringers */}
-            <div className="card-elevated mt-6 min-w-0">
+            <div className="card-elevated mt-6">
               <div className="p-4 border-b flex items-center justify-between">
                 <div>
                   <h2 className="font-semibold">Stringers</h2>
@@ -1393,7 +1393,7 @@ export default function Admin() {
                   Add Stringer
                 </Button>
               </div>
-              <div className="table-scroll-viewport">
+              <div className="min-w-0 max-w-full overflow-x-auto">
                 {stringersLoading ? (
                   <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
                 ) : stringersList.length === 0 ? (

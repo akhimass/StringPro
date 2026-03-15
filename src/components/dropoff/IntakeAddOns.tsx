@@ -17,9 +17,10 @@ interface IntakeAddOnsProps {
   stringersLoading?: boolean;
 }
 
-export function IntakeAddOnsSection({ addOns, onChange, stringers, stringersLoading }: IntakeAddOnsProps) {
+export function IntakeAddOnsSection({ addOns, onChange, stringers = [], stringersLoading }: IntakeAddOnsProps) {
   const update = (partial: Partial<AddOns>) => onChange({ ...addOns, ...partial });
-  const stringerValue = addOns.stringerId ?? '';
+  const stringerValue = addOns.stringerId ?? 'default';
+  const list = Array.isArray(stringers) ? stringers : [];
 
   return (
     <div className="card-elevated p-6 space-y-4">
@@ -57,15 +58,15 @@ export function IntakeAddOnsSection({ addOns, onChange, stringers, stringersLoad
           <Label>Stringer Preference</Label>
           <Select
             value={stringerValue}
-            onValueChange={(v) => update({ stringerId: v === '' ? null : v })}
+            onValueChange={(v) => update({ stringerId: v === 'default' ? null : v })}
             disabled={stringersLoading}
           >
             <SelectTrigger>
               <SelectValue placeholder={stringersLoading ? 'Loading…' : 'Select stringer'} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Default Stringer</SelectItem>
-              {stringers.map((s) => (
+              <SelectItem value="default">Default Stringer</SelectItem>
+              {list.map((s) => (
                 <SelectItem key={s.id} value={s.id}>
                   <span>{s.name}</span>{' '}
                   <span className="text-primary font-medium">+$10</span>

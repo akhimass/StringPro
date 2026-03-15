@@ -199,7 +199,7 @@ export default function FrontDeskDashboard() {
           <p className="text-muted-foreground">Payments and pickups for completed jobs.</p>
         </div>
 
-        <div className="card-elevated min-w-0">
+        <div className="card-elevated">
           <div className="p-4 border-b flex flex-col sm:flex-row gap-4 items-start sm:items-center">
             <Input
               placeholder="Search by name or ticket..."
@@ -236,7 +236,7 @@ export default function FrontDeskDashboard() {
             </div>
           </div>
 
-          <div className="table-scroll-viewport">
+          <div className="min-w-0 max-w-full overflow-x-auto">
             {isLoading ? (
               <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
             ) : filteredJobs.length === 0 ? (

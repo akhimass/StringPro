@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { supabaseConfigError } from "@/lib/supabase";
 import DropOff from "./pages/DropOff";
 import Admin from "./pages/Admin";
@@ -37,8 +38,9 @@ function App() {
           </div>
         )}
         <BrowserRouter>
-          <AuthProvider>
-            <Routes>
+          <ErrorBoundary>
+            <AuthProvider>
+              <Routes>
               <Route path="/" element={<DropOff />} />
               <Route path="/login" element={<Login />} />
               <Route
@@ -66,8 +68,9 @@ function App() {
                 }
               />
               <Route path="*" element={<NotFound />} />
-            </Routes>
-          </AuthProvider>
+              </Routes>
+            </AuthProvider>
+          </ErrorBoundary>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
