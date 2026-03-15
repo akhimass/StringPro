@@ -739,7 +739,7 @@ export default function Admin() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="racquets" className="animate-fade-in min-w-0">
+          <TabsContent value="racquets" className="animate-fade-in">
             <div className="card-elevated min-w-0">
               <div className="p-4 border-b flex flex-col sm:flex-row gap-4">
                 <Input
@@ -1129,7 +1129,7 @@ export default function Admin() {
             </div>
           </TabsContent>
 
-          <TabsContent value="settings" className="animate-fade-in min-w-0">
+          <TabsContent value="settings" className="animate-fade-in">
             <div className="card-elevated min-w-0">
               <div className="p-4 border-b flex items-center justify-between">
                 <div>
