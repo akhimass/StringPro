@@ -36,7 +36,7 @@ async function fetchProfileSafe(
   if (import.meta.env.DEV) console.debug('[Auth] fetchProfile started', userId);
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const timeoutPromise = new Promise<{ data: null; error: { message: string }>>((resolve) => {
+      const timeoutPromise = new Promise((resolve) => {
         setTimeout(() => resolve({ data: null, error: { message: 'Profile fetch timeout' } }), PROFILE_FETCH_TIMEOUT_MS);
       });
       const queryPromise = supabase
