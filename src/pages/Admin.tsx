@@ -131,6 +131,7 @@ export default function Admin() {
   const [stringerDialogOpen, setStringerDialogOpen] = useState(false);
   const [editingStringer, setEditingStringer] = useState<Stringer | null>(null);
   const [stringerName, setStringerName] = useState('');
+  const [stringerExtraCost, setStringerExtraCost] = useState<string>('');
   const [stringerToDelete, setStringerToDelete] = useState<Stringer | null>(null);
   const [stringerDeleteDialogOpen, setStringerDeleteDialogOpen] = useState(false);
 
@@ -349,24 +350,27 @@ export default function Admin() {
   });
 
   const createStringerMutation = useMutation({
-    mutationFn: (name: string) => createStringer(name),
+    mutationFn: ({ name, extraCost }: { name: string; extraCost?: number | null }) => createStringer(name, extraCost),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stringers'] });
       toast.success('Stringer added');
       setStringerDialogOpen(false);
       setStringerName('');
+      setStringerExtraCost('');
       setEditingStringer(null);
     },
     onError: (e: Error) => toast.error(e?.message ?? 'Failed to add stringer'),
   });
 
   const updateStringerMutation = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => updateStringer(id, name),
+    mutationFn: ({ id, name, extraCost }: { id: string; name: string; extraCost?: number | null }) =>
+      updateStringer(id, name, extraCost),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stringers'] });
       toast.success('Stringer updated');
       setStringerDialogOpen(false);
       setStringerName('');
+      setStringerExtraCost('');
       setEditingStringer(null);
     },
     onError: (e: Error) => toast.error(e?.message ?? 'Failed to update stringer'),
@@ -600,9 +604,15 @@ export default function Admin() {
     if (stringer) {
       setEditingStringer(stringer);
       setStringerName(stringer.name);
+      setStringerExtraCost(
+        stringer.extra_cost != null && Number.isFinite(stringer.extra_cost)
+          ? String(stringer.extra_cost)
+          : '0'
+      );
     } else {
       setEditingStringer(null);
       setStringerName('');
+      setStringerExtraCost('0');
     }
     setStringerDialogOpen(true);
   };
@@ -611,6 +621,7 @@ export default function Admin() {
     setStringerDialogOpen(false);
     setEditingStringer(null);
     setStringerName('');
+    setStringerExtraCost('');
   };
 
   const handleStringerSubmit = () => {
@@ -619,10 +630,12 @@ export default function Admin() {
       toast.error('Enter a name');
       return;
     }
+    const extraCost = stringerExtraCost.trim() === '' ? 0 : parseFloat(stringerExtraCost);
+    const extraCostVal = Number.isFinite(extraCost) && extraCost >= 0 ? extraCost : 0;
     if (editingStringer) {
-      updateStringerMutation.mutate({ id: editingStringer.id, name });
+      updateStringerMutation.mutate({ id: editingStringer.id, name, extraCost: extraCostVal });
     } else {
-      createStringerMutation.mutate(name);
+      createStringerMutation.mutate({ name, extraCost: extraCostVal });
     }
   };
 
@@ -1412,6 +1425,7 @@ export default function Admin() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Name</TableHead>
+                        <TableHead>Extra cost</TableHead>
                         <TableHead>Created</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
@@ -1420,6 +1434,11 @@ export default function Admin() {
                       {stringersList.map((stringer) => (
                         <TableRow key={stringer.id} className="group">
                           <TableCell className="font-medium">{stringer.name}</TableCell>
+                          <TableCell className="text-sm">
+                            {stringer.extra_cost != null && Number(stringer.extra_cost) > 0
+                              ? `+$${Number(stringer.extra_cost).toFixed(2)}`
+                              : '—'}
+                          </TableCell>
                           <TableCell className="text-muted-foreground text-sm">
                             {stringer.created_at
                               ? format(parseISO(stringer.created_at), 'MMM d, yyyy')
@@ -1661,6 +1680,7 @@ export default function Admin() {
             if (!open) {
               setEditingStringer(null);
               setStringerName('');
+              setStringerExtraCost('');
             }
           }}
         >
@@ -1675,8 +1695,21 @@ export default function Admin() {
                   id="stringerName"
                   value={stringerName}
                   onChange={(e) => setStringerName(e.target.value)}
-                  placeholder="e.g., Stringer A, John"
+                  placeholder="e.g., Stringer A, Ouyang"
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="stringerExtraCost">Extra cost ($)</Label>
+                <Input
+                  id="stringerExtraCost"
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={stringerExtraCost}
+                  onChange={(e) => setStringerExtraCost(e.target.value)}
+                  placeholder="0"
+                />
+                <p className="text-xs text-muted-foreground">Added to total when this stringer is selected (e.g. 10 for +$10)</p>
               </div>
             </div>
             <DialogFooter>

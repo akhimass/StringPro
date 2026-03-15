@@ -13,6 +13,8 @@ export interface FrontDeskStaff {
 export interface Stringer {
   id: string;
   name: string;
+  /** Extra fee in dollars when this stringer is selected (e.g. 10 for +$10). */
+  extra_cost?: number | null;
   created_at?: string | null;
 }
 

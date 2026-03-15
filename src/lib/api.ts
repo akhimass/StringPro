@@ -85,20 +85,26 @@ export const fetchStringers = async (): Promise<Stringer[]> => {
   return (data || []) as Stringer[];
 };
 
-export const createStringer = async (name: string): Promise<Stringer> => {
+export const createStringer = async (name: string, extraCost?: number | null): Promise<Stringer> => {
+  const payload: { name: string; extra_cost?: number } = { name: name.trim() };
+  const cost = extraCost != null ? Number(extraCost) : 0;
+  if (Number.isFinite(cost) && cost >= 0) payload.extra_cost = cost;
   const { data, error } = await supabase
     .from('stringers' as any)
-    .insert({ name: name.trim() })
+    .insert(payload)
     .select()
     .single();
   if (error) throw error;
   return data as Stringer;
 };
 
-export const updateStringer = async (id: string, name: string): Promise<Stringer> => {
+export const updateStringer = async (id: string, name: string, extraCost?: number | null): Promise<Stringer> => {
+  const payload: { name: string; extra_cost?: number } = { name: name.trim() };
+  const cost = extraCost != null ? Number(extraCost) : 0;
+  if (Number.isFinite(cost) && cost >= 0) payload.extra_cost = cost;
   const { data, error } = await supabase
     .from('stringers' as any)
-    .update({ name: name.trim() })
+    .update(payload)
     .eq('id', id)
     .select()
     .single();
@@ -258,7 +264,8 @@ export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJ
   }
 
   const addOns = formData.addOns;
-  const amountDue = computeAmountDue({ addOns, stringExtra });
+  const stringers = (formData as any).stringers;
+  const amountDue = computeAmountDue({ addOns, stringExtra, stringers });
 
   const stringerId = addOns?.stringerId ?? null;
   const serviceType = stringerId != null ? 'specialist' : 'default';

@@ -316,7 +316,7 @@ export default function DropOff() {
       ? data.customerEmail.trim().toLowerCase()
       : '';
 
-    const payload: RacquetFormData = {
+    const payload: RacquetFormData & { stringers?: typeof stringers } = {
       ...(data as unknown as RacquetFormData),
       customerPhone: normalizedPhone,
       customerEmail: normalizedEmail,
@@ -325,6 +325,7 @@ export default function DropOff() {
       dropOffByStaff: data.dropOffByStaff?.trim() || '',
       termsAccepted: data.termsAccepted,
       addOns,
+      stringers: Array.isArray(stringers) ? stringers : undefined,
     };
 
     mutation.mutate(payload);
@@ -380,7 +381,7 @@ export default function DropOff() {
             ticketNumber={submittedTicket}
             amountDue={
               submittedAmountDue ??
-              computeAmountDue({ addOns, stringExtra: selectedStringExtra })
+              computeAmountDue({ addOns, stringExtra: selectedStringExtra, stringers })
             }
             onNewSubmission={handleNewSubmission}
           />
@@ -704,6 +705,7 @@ export default function DropOff() {
                 addOns={addOns}
                 stringExtra={selectedStringExtra}
                 stringerName={addOns.stringerId && Array.isArray(stringers) ? (stringers.find((s) => s.id === addOns.stringerId)?.name ?? null) : null}
+                stringers={stringers}
               />
 
               {/* Waiver & Terms – Drop-Off Confirmation */}

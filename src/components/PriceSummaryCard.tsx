@@ -1,4 +1,4 @@
-import { IntakeAddOns } from '@/types';
+import { IntakeAddOns, Stringer } from '@/types';
 import { BASE_LABOR_FEE, computePricing } from '@/lib/pricing';
 
 interface PriceSummaryCardProps {
@@ -8,14 +8,16 @@ interface PriceSummaryCardProps {
   stringExtra?: number | null;
   /** Name of selected stringer when addOns.stringerId is set (e.g. "Ouyang"). */
   stringerName?: string | null;
+  /** Stringers list for pricing (lookup stringer extra cost). */
+  stringers?: Stringer[] | null;
 }
 
 function formatPrice(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
-export function PriceSummaryCard({ stringName, addOns, stringExtra, stringerName }: PriceSummaryCardProps) {
-  const breakdown = computePricing({ stringExtra, addOns });
+export function PriceSummaryCard({ stringName, addOns, stringExtra, stringerName, stringers }: PriceSummaryCardProps) {
+  const breakdown = computePricing({ stringExtra, addOns, stringers });
 
   return (
     <div className="card-elevated p-6 space-y-4">

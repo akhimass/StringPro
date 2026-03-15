@@ -66,12 +66,16 @@ export function IntakeAddOnsSection({ addOns, onChange, stringers = [], stringer
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="default">Default Stringer</SelectItem>
-              {list.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  <span>{s.name}</span>{' '}
-                  <span className="text-primary font-medium">+$10</span>
-                </SelectItem>
-              ))}
+              {list.map((s) => {
+                const cost = s.extra_cost != null && Number(s.extra_cost) > 0 ? Number(s.extra_cost) : 0;
+                const costLabel = cost > 0 ? `+$${cost.toFixed(2)}` : 'Included';
+                return (
+                  <SelectItem key={s.id} value={s.id}>
+                    <span>{s.name}</span>{' '}
+                    <span className="text-primary font-medium">{costLabel}</span>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>
