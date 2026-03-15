@@ -22,47 +22,72 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+const PROFILE_FETCH_TIMEOUT_MS = 12_000;
 
-  const fetchProfile = useCallback(async (userId: string, retries = 1): Promise<void> => {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      const { data, error } = await supabase
+/**
+ * Fetches profile from public.profiles. Always resolves (never throws).
+ * Handles: no row, RLS failure, transient errors, timeout. On any failure after retries, sets profile to null.
+ */
+async function fetchProfileSafe(
+  userId: string,
+  setProfile: (p: Profile | null) => void,
+  retries = 1
+): Promise<void> {
+  if (import.meta.env.DEV) console.debug('[Auth] fetchProfile started', userId);
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const timeoutPromise = new Promise<{ data: null; error: { message: string }>>((resolve) => {
+        setTimeout(() => resolve({ data: null, error: { message: 'Profile fetch timeout' } }), PROFILE_FETCH_TIMEOUT_MS);
+      });
+      const queryPromise = supabase
         .from('profiles')
         .select('id, role, full_name')
         .eq('id', userId)
         .maybeSingle();
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+
       if (error) {
-        if (import.meta.env.DEV) console.debug('[Auth] profile fetch', error.message, attempt < retries ? '(will retry)' : '');
+        if (import.meta.env.DEV) console.debug('[Auth] fetchProfile error', error.message, attempt < retries ? '(will retry)' : '');
         if (attempt < retries) continue;
-        console.error('Profile fetch error', error);
+        console.error('[Auth] Profile fetch error', error);
         setProfile(null);
+        if (import.meta.env.DEV) console.debug('[Auth] fetchProfile failure (set profile null)');
         return;
       }
       if (data && data.role) {
-        if (import.meta.env.DEV) console.debug('[Auth] profile loaded', data.role);
         setProfile({
           id: data.id,
           role: data.role as ProfileRole,
           full_name: data.full_name ?? null,
         });
+        if (import.meta.env.DEV) console.debug('[Auth] fetchProfile success', data.role);
       } else {
         setProfile(null);
+        if (import.meta.env.DEV) console.debug('[Auth] fetchProfile no row or no role');
       }
       return;
+    } catch (err) {
+      if (import.meta.env.DEV) console.debug('[Auth] fetchProfile exception', err, attempt < retries ? '(will retry)' : '');
+      if (attempt >= retries) {
+        setProfile(null);
+        if (import.meta.env.DEV) console.debug('[Auth] fetchProfile failure after retries');
+        return;
+      }
     }
-  }, []);
+  }
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const refreshProfile = useCallback(async () => {
     const { data: { session: s } } = await supabase.auth.getSession();
-    if (s?.user?.id) await fetchProfile(s.user.id);
-  }, [fetchProfile]);
+    if (s?.user?.id) await fetchProfileSafe(s.user.id, setProfile);
+  }, []);
 
   useEffect(() => {
-    // One-time: clear any legacy Supabase auth state that may still be in localStorage
-    // from before we switched to sessionStorage-only sessions.
     if (typeof window !== 'undefined') {
       Object.keys(window.localStorage)
         .filter((key) => key.startsWith('sb-'))
@@ -71,40 +96,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     let mounted = true;
 
+    if (import.meta.env.DEV) console.debug('[Auth] getSession started');
+
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       if (!mounted) return;
-      if (import.meta.env.DEV) console.debug('[Auth] session restored', s?.user?.id ?? 'none');
-      setSession(s);
-      if (s?.user?.id) {
-        fetchProfile(s.user.id).finally(() => {
-          if (mounted) setLoading(false);
-        });
-      } else {
+      if (import.meta.env.DEV) console.debug('[Auth] getSession returned', s ? 'session' : 'no session', s?.user?.id ?? '');
+
+      if (!s) {
+        setSession(null);
         setProfile(null);
         setLoading(false);
+        if (import.meta.env.DEV) console.debug('[Auth] setLoading(false) (no session)');
+        return;
       }
+
+      setSession(s);
+
+      fetchProfileSafe(s.user.id, setProfile).finally(() => {
+        if (!mounted) return;
+        setLoading(false);
+        if (import.meta.env.DEV) console.debug('[Auth] setLoading(false) (boot)');
+      });
     });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
       if (!mounted) return;
       if (import.meta.env.DEV) console.debug('[Auth] onAuthStateChange', event, s?.user?.id ?? 'none');
-      setLoading(true);
-      setSession(s);
-      if (s?.user?.id) {
-        await fetchProfile(s.user.id);
-      } else {
-        setProfile(null);
+
+      if (event === 'INITIAL_SESSION') {
+        return;
       }
-      if (mounted) setLoading(false);
+
+      setSession(s ?? null);
+      if (!s?.user?.id) {
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      fetchProfileSafe(s.user.id, setProfile).finally(() => {
+        if (mounted) {
+          setLoading(false);
+          if (import.meta.env.DEV) console.debug('[Auth] setLoading(false) (onAuthStateChange)');
+        }
+      });
     });
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [fetchProfile]);
+  }, []);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
