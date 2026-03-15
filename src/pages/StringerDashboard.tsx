@@ -165,7 +165,7 @@ export default function StringerDashboard() {
             </Select>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="min-w-0 max-w-full overflow-x-auto">
             {isLoading ? (
               <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
             ) : stringerJobs.length === 0 ? (

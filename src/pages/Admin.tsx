@@ -644,7 +644,7 @@ export default function Admin() {
                 </Select>
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="min-w-0 max-w-full overflow-x-auto">
                 {racquetsLoading ? (
                   <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
                 ) : filteredRacquets.length === 0 ? (
@@ -982,7 +982,7 @@ export default function Admin() {
                 </Button>
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="min-w-0 max-w-full overflow-x-auto">
                 {stringsLoading ? (
                   <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
                 ) : strings.length === 0 ? (
@@ -1083,7 +1083,7 @@ export default function Admin() {
                   Add Brand
                 </Button>
               </div>
-              <div className="overflow-x-auto">
+              <div className="min-w-0 max-w-full overflow-x-auto">
                 {brandsLoading ? (
                   <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
                 ) : brands.length === 0 ? (
@@ -1158,7 +1158,7 @@ export default function Admin() {
                   Add Staff
                 </Button>
               </div>
-              <div className="overflow-x-auto">
+              <div className="min-w-0 max-w-full overflow-x-auto">
                 {frontDeskStaffLoading ? (
                   <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
                 ) : frontDeskStaffList.length === 0 ? (

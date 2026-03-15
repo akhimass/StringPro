@@ -37,9 +37,9 @@ const link = (path: string, label: string) => ({ path, label });
 export function Header() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { session, role, signOut } = useAuth();
+  const { session, role, loading, signOut } = useAuth();
 
-  const isStaff = role === 'admin' || role === 'frontdesk' || role === 'stringer';
+  const isStaff = !loading && (role === 'admin' || role === 'frontdesk' || role === 'stringer');
   const navItems: { path: string; label: string }[] = [link('/', 'Drop-Off')];
   if (isStaff) {
     if (role === 'admin') navItems.push(link('/admin', 'Manager'));

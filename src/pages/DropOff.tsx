@@ -69,8 +69,8 @@ const formSchema = z.object({
     .min(1, 'Tension is required')
     .refine((val) => {
       const num = parseFloat(val);
-      return !isNaN(num) && isFinite(num) && num > 0 && num <= 22;
-    }, { message: 'Tension must be between 1 and 22 lbs. Manager can override if needed.' }),
+      return !isNaN(num) && isFinite(num) && num > 0;
+    }, { message: 'Enter a valid positive tension (lbs).' }),
   notes: z.string().max(500).optional(),
   dropInDate: z
     .string()
@@ -637,7 +637,6 @@ export default function DropOff() {
                       type="number"
                       step="1"
                       min="1"
-                      max="100"
                       {...register('tension', {
                         onBlur: () => trigger('tension'),
                       })}

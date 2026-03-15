@@ -27,25 +27,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = useCallback(async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, role, full_name')
-      .eq('id', userId)
-      .maybeSingle();
-    if (error) {
-      console.error('Profile fetch error', error);
-      setProfile(null);
+  const fetchProfile = useCallback(async (userId: string, retries = 1): Promise<void> => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, role, full_name')
+        .eq('id', userId)
+        .maybeSingle();
+      if (error) {
+        if (import.meta.env.DEV) console.debug('[Auth] profile fetch', error.message, attempt < retries ? '(will retry)' : '');
+        if (attempt < retries) continue;
+        console.error('Profile fetch error', error);
+        setProfile(null);
+        return;
+      }
+      if (data && data.role) {
+        if (import.meta.env.DEV) console.debug('[Auth] profile loaded', data.role);
+        setProfile({
+          id: data.id,
+          role: data.role as ProfileRole,
+          full_name: data.full_name ?? null,
+        });
+      } else {
+        setProfile(null);
+      }
       return;
-    }
-    if (data && data.role) {
-      setProfile({
-        id: data.id,
-        role: data.role as ProfileRole,
-        full_name: data.full_name ?? null,
-      });
-    } else {
-      setProfile(null);
     }
   }, []);
 
@@ -63,10 +69,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .forEach((key) => window.localStorage.removeItem(key));
     }
 
+    let mounted = true;
+
     supabase.auth.getSession().then(({ data: { session: s } }) => {
+      if (!mounted) return;
+      if (import.meta.env.DEV) console.debug('[Auth] session restored', s?.user?.id ?? 'none');
       setSession(s);
       if (s?.user?.id) {
-        fetchProfile(s.user.id).finally(() => setLoading(false));
+        fetchProfile(s.user.id).finally(() => {
+          if (mounted) setLoading(false);
+        });
       } else {
         setProfile(null);
         setLoading(false);
@@ -75,17 +87,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, s) => {
+    } = supabase.auth.onAuthStateChange(async (event, s) => {
+      if (!mounted) return;
+      if (import.meta.env.DEV) console.debug('[Auth] onAuthStateChange', event, s?.user?.id ?? 'none');
+      setLoading(true);
       setSession(s);
       if (s?.user?.id) {
         await fetchProfile(s.user.id);
       } else {
         setProfile(null);
       }
-      setLoading(false);
+      if (mounted) setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [fetchProfile]);
 
   const signOut = useCallback(async () => {
