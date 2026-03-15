@@ -21,6 +21,13 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Table,
   TableBody,
   TableCell,
@@ -51,6 +58,7 @@ const FRONT_DESK_ACTIVE_STATUSES = new Set([
 export default function FrontDeskDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
+  const [monthYearFilter, setMonthYearFilter] = useState<string>('all');
   const queryClient = useQueryClient();
 
   // Dialog states
@@ -84,6 +92,21 @@ export default function FrontDeskDashboard() {
     onError: (err: Error) => toast.error(err?.message ?? 'Failed to record payment'),
   });
 
+  const monthYearOptions = (() => {
+    const set = new Set<string>();
+    racquets.forEach((r) => {
+      if (r.drop_in_date) {
+        try {
+          const d = parseISO(r.drop_in_date);
+          set.add(format(d, 'yyyy-MM'));
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  })();
+
   // Filter: active = ready for pickup / waiting; completed = pickup_completed
   const filteredJobs = racquets.filter((r) => {
     const normalized = normalizeStatusKey(r.status);
@@ -92,11 +115,20 @@ export default function FrontDeskDashboard() {
     } else {
       if (!FRONT_DESK_ACTIVE_STATUSES.has(normalized)) return false;
     }
+    const matchesMonthYear =
+      monthYearFilter === 'all' ||
+      (r.drop_in_date && (() => {
+        try {
+          return format(parseISO(r.drop_in_date), 'yyyy-MM') === monthYearFilter;
+        } catch {
+          return false;
+        }
+      })());
     const matchesSearch =
       searchQuery === '' ||
       r.member_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (r.ticket_number?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
-    return matchesSearch;
+    return matchesMonthYear && matchesSearch;
   });
 
   const handleRecordPayment = (amount: number, staffName: string, paymentMethod?: string | null) => {
@@ -175,6 +207,23 @@ export default function FrontDeskDashboard() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="sm:max-w-xs"
             />
+            <Select value={monthYearFilter} onValueChange={setMonthYearFilter}>
+              <SelectTrigger className="sm:w-40">
+                <SelectValue placeholder="Month - Year" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All months</SelectItem>
+                {monthYearOptions.map((ym) => {
+                  try {
+                    const [y, m] = ym.split('-');
+                    const label = format(new Date(Number(y), Number(m) - 1, 1), 'MMM yyyy');
+                    return <SelectItem key={ym} value={ym}>{label}</SelectItem>;
+                  } catch {
+                    return <SelectItem key={ym} value={ym}>{ym}</SelectItem>;
+                  }
+                })}
+              </SelectContent>
+            </Select>
             <div className="flex items-center gap-2">
               <Label htmlFor="show-completed" className="text-sm text-muted-foreground">
                 {showCompleted ? 'Completed' : 'Active'}
@@ -203,7 +252,8 @@ export default function FrontDeskDashboard() {
                     <TableHead>Ticket</TableHead>
                     <TableHead>Customer</TableHead>
                     <TableHead>Racquet</TableHead>
-                    <TableHead>Drop-off</TableHead>
+                    <TableHead>Drop-off date</TableHead>
+                    <TableHead>Month - Year</TableHead>
                     <TableHead>Received by</TableHead>
                     <TableHead>Pickup Timer</TableHead>
                     <TableHead>Paid</TableHead>
@@ -240,6 +290,9 @@ export default function FrontDeskDashboard() {
                         </TableCell>
                         <TableCell className="text-sm">
                           {job.drop_in_date ? (() => { try { return format(parseISO(job.drop_in_date), 'MMM d, yyyy'); } catch { return job.drop_in_date; } })() : 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {job.drop_in_date ? (() => { try { return format(parseISO(job.drop_in_date), 'MMM yyyy'); } catch { return '—'; } })() : '—'}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {job.drop_off_by_staff?.trim() || '—'}

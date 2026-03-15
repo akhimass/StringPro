@@ -6,13 +6,15 @@ interface PriceSummaryCardProps {
   addOns?: IntakeAddOns;
   /** Per-string extra cost in dollars (not including base labor). */
   stringExtra?: number | null;
+  /** Name of selected stringer when addOns.stringerId is set (e.g. "Ouyang"). */
+  stringerName?: string | null;
 }
 
 function formatPrice(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
-export function PriceSummaryCard({ stringName, addOns, stringExtra }: PriceSummaryCardProps) {
+export function PriceSummaryCard({ stringName, addOns, stringExtra, stringerName }: PriceSummaryCardProps) {
   const breakdown = computePricing({ stringExtra, addOns });
 
   return (
@@ -50,7 +52,7 @@ export function PriceSummaryCard({ stringName, addOns, stringExtra }: PriceSumma
         )}
         {breakdown.stringerFee > 0 && (
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Ouyang</span>
+            <span className="text-muted-foreground">{stringerName || 'Stringer'}</span>
             <span className="font-medium">+{formatPrice(breakdown.stringerFee)}</span>
           </div>
         )}

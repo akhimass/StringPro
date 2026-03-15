@@ -17,12 +17,17 @@ import {
   createFrontDeskStaff,
   updateFrontDeskStaff,
   deleteFrontDeskStaff,
+  fetchStringers,
+  createStringer,
+  updateStringer,
+  deleteStringer,
   seedStarterStrings,
   markReceivedByFrontDesk,
   recordPayment,
   markPickupCompleted,
+  updateRacquetStringer,
 } from '@/lib/api';
-import { RacquetStatus, StringOption, RacquetJob, RacquetBrand, FrontDeskStaff, normalizeStatusKey } from '@/types';
+import { RacquetStatus, StringOption, RacquetJob, RacquetBrand, FrontDeskStaff, Stringer, normalizeStatusKey } from '@/types';
 import { PickupCountdownBadge } from '@/components/PickupCountdownBadge';
 import { Header } from '@/components/Header';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -93,6 +98,7 @@ export default function Admin() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'racquets';
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [monthYearFilter, setMonthYearFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const queryClient = useQueryClient();
 
@@ -120,6 +126,13 @@ export default function Admin() {
   const [staffName, setStaffName] = useState('');
   const [staffToDelete, setStaffToDelete] = useState<FrontDeskStaff | null>(null);
   const [staffDeleteDialogOpen, setStaffDeleteDialogOpen] = useState(false);
+
+  // Stringers dialog state
+  const [stringerDialogOpen, setStringerDialogOpen] = useState(false);
+  const [editingStringer, setEditingStringer] = useState<Stringer | null>(null);
+  const [stringerName, setStringerName] = useState('');
+  const [stringerToDelete, setStringerToDelete] = useState<Stringer | null>(null);
+  const [stringerDeleteDialogOpen, setStringerDeleteDialogOpen] = useState(false);
 
   // Delete racquet dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -206,6 +219,12 @@ export default function Admin() {
   const { data: frontDeskStaffList = [], isLoading: frontDeskStaffLoading } = useQuery({
     queryKey: ['front_desk_staff'],
     queryFn: fetchFrontDeskStaff,
+    retry: 1,
+  });
+
+  const { data: stringersList = [], isLoading: stringersLoading } = useQuery({
+    queryKey: ['stringers'],
+    queryFn: fetchStringers,
     retry: 1,
   });
 
@@ -329,6 +348,41 @@ export default function Admin() {
     onError: (e: Error) => toast.error(e?.message ?? 'Failed to remove front desk staff'),
   });
 
+  const createStringerMutation = useMutation({
+    mutationFn: (name: string) => createStringer(name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stringers'] });
+      toast.success('Stringer added');
+      setStringerDialogOpen(false);
+      setStringerName('');
+      setEditingStringer(null);
+    },
+    onError: (e: Error) => toast.error(e?.message ?? 'Failed to add stringer'),
+  });
+
+  const updateStringerMutation = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => updateStringer(id, name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stringers'] });
+      toast.success('Stringer updated');
+      setStringerDialogOpen(false);
+      setStringerName('');
+      setEditingStringer(null);
+    },
+    onError: (e: Error) => toast.error(e?.message ?? 'Failed to update stringer'),
+  });
+
+  const deleteStringerMutation = useMutation({
+    mutationFn: (id: string) => deleteStringer(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stringers'] });
+      toast.success('Stringer removed');
+      setStringerDeleteDialogOpen(false);
+      setStringerToDelete(null);
+    },
+    onError: (e: Error) => toast.error(e?.message ?? 'Failed to remove stringer'),
+  });
+
   const deleteRacquetMutation = useMutation({
     mutationFn: (id: string) => deleteRacquet(id),
     onSuccess: () => {
@@ -341,6 +395,16 @@ export default function Admin() {
       toast.error('Failed to delete racquet');
       setDeleteDialogOpen(false);
     },
+  });
+
+  const updateStringerMutationForJob = useMutation({
+    mutationFn: ({ id, stringerId }: { id: string; stringerId: string | null }) =>
+      updateRacquetStringer(id, stringerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['racquets'] });
+      toast.success('Stringer updated');
+    },
+    onError: () => toast.error('Failed to update stringer'),
   });
 
   const handleSendReminderConfirm = async () => {
@@ -377,16 +441,41 @@ export default function Admin() {
     }
   };
 
+  // Unique month-years from racquets for filter dropdown (yyyy-MM), sorted newest first
+  const monthYearOptions = (() => {
+    const set = new Set<string>();
+    racquets.forEach((r) => {
+      if (r.drop_in_date) {
+        try {
+          const d = parseISO(r.drop_in_date);
+          set.add(format(d, 'yyyy-MM'));
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  })();
+
   // Filtered racquets — use normalizeStatusKey for canonical filtering
   const filteredRacquets = racquets.filter((r) => {
     const normalized = normalizeStatusKey(r.status);
     const matchesStatus = statusFilter === 'all' || normalized === statusFilter;
+    const matchesMonthYear =
+      monthYearFilter === 'all' ||
+      (r.drop_in_date && (() => {
+        try {
+          return format(parseISO(r.drop_in_date), 'yyyy-MM') === monthYearFilter;
+        } catch {
+          return false;
+        }
+      })());
     const matchesSearch =
       searchQuery === '' ||
       r.member_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (r.racquet_type?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
       (r.ticket_number?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
-    return matchesStatus && matchesSearch;
+    return matchesStatus && matchesMonthYear && matchesSearch;
   });
 
   // String dialog handlers
@@ -504,6 +593,36 @@ export default function Admin() {
       updateStaffMutation.mutate({ id: editingStaff.id, name });
     } else {
       createStaffMutation.mutate(name);
+    }
+  };
+
+  const openStringerDialog = (stringer?: Stringer) => {
+    if (stringer) {
+      setEditingStringer(stringer);
+      setStringerName(stringer.name);
+    } else {
+      setEditingStringer(null);
+      setStringerName('');
+    }
+    setStringerDialogOpen(true);
+  };
+
+  const closeStringerDialog = () => {
+    setStringerDialogOpen(false);
+    setEditingStringer(null);
+    setStringerName('');
+  };
+
+  const handleStringerSubmit = () => {
+    const name = stringerName.trim();
+    if (!name) {
+      toast.error('Enter a name');
+      return;
+    }
+    if (editingStringer) {
+      updateStringerMutation.mutate({ id: editingStringer.id, name });
+    } else {
+      createStringerMutation.mutate(name);
     }
   };
 
@@ -642,6 +761,23 @@ export default function Admin() {
                     ))}
                   </SelectContent>
                 </Select>
+                <Select value={monthYearFilter} onValueChange={setMonthYearFilter}>
+                  <SelectTrigger className="sm:w-40">
+                    <SelectValue placeholder="Month - Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All months</SelectItem>
+                    {monthYearOptions.map((ym) => {
+                      try {
+                        const [y, m] = ym.split('-');
+                        const label = format(new Date(Number(y), Number(m) - 1, 1), 'MMM yyyy');
+                        return <SelectItem key={ym} value={ym}>{label}</SelectItem>;
+                      } catch {
+                        return <SelectItem key={ym} value={ym}>{ym}</SelectItem>;
+                      }
+                    })}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="min-w-0 max-w-full overflow-x-auto">
@@ -663,12 +799,13 @@ export default function Admin() {
                         <TableHead>Customer</TableHead>
                         <TableHead>Racquet</TableHead>
                         <TableHead>String</TableHead>
-                        <TableHead>Drop-off</TableHead>
+                        <TableHead>Drop-off date</TableHead>
+                        <TableHead>Month - Year</TableHead>
                         <TableHead>Received by</TableHead>
                         <TableHead>Due Status</TableHead>
                         <TableHead>Pickup</TableHead>
                         <TableHead>Tension</TableHead>
-                        <TableHead>Service</TableHead>
+                        <TableHead>Stringer</TableHead>
                         <TableHead>Amount</TableHead>
                         <TableHead>Payment</TableHead>
                         <TableHead>Status</TableHead>
@@ -716,6 +853,15 @@ export default function Admin() {
                                 }
                               })() : 'N/A'}
                             </TableCell>
+                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                              {racquet.drop_in_date ? (() => {
+                                try {
+                                  return format(parseISO(racquet.drop_in_date), 'MMM yyyy');
+                                } catch {
+                                  return '—';
+                                }
+                              })() : '—'}
+                            </TableCell>
                             <TableCell className="text-sm text-muted-foreground">
                               {racquet.drop_off_by_staff?.trim() || '—'}
                             </TableCell>
@@ -751,15 +897,29 @@ export default function Admin() {
                                 </span>
                               )}
                             </TableCell>
-                            <TableCell>
-                              <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wide ${
-                                racquet.service_type === 'specialist'
-                                  ? 'bg-status-pending-bg text-status-pending'
-                                  : 'bg-muted text-muted-foreground'
-                              }`}>
-                                {racquet.service_type === 'specialist' ? 'Specialist' : 'Default'}
-                                {racquet.assigned_stringer ? ` (${racquet.assigned_stringer})` : ''}
-                              </span>
+                            <TableCell className="text-sm">
+                              <Select
+                                value={racquet.stringer_id ?? ''}
+                                onValueChange={(v) =>
+                                  updateStringerMutationForJob.mutate({
+                                    id: racquet.id,
+                                    stringerId: v === '' ? null : v,
+                                  })
+                                }
+                                disabled={updateStringerMutationForJob.isPending}
+                              >
+                                <SelectTrigger className="h-8 w-[120px]">
+                                  <SelectValue placeholder="Default" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="">Default</SelectItem>
+                                  {stringersList.map((s) => (
+                                    <SelectItem key={s.id} value={s.id}>
+                                      {s.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             </TableCell>
                             {/* Paid + Balance */}
                             <TableCell className="text-sm">
@@ -1220,6 +1380,81 @@ export default function Admin() {
                 )}
               </div>
             </div>
+
+            {/* Stringers */}
+            <div className="card-elevated mt-6">
+              <div className="p-4 border-b flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold">Stringers</h2>
+                  <p className="text-sm text-muted-foreground">Stringers shown on dashboards; assign to jobs for specialist service.</p>
+                </div>
+                <Button onClick={() => openStringerDialog()} size="sm" className="gap-2">
+                  <Plus className="w-4 h-4" />
+                  Add Stringer
+                </Button>
+              </div>
+              <div className="min-w-0 max-w-full overflow-x-auto">
+                {stringersLoading ? (
+                  <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
+                ) : stringersList.length === 0 ? (
+                  <EmptyState
+                    icon={Settings}
+                    title="No stringers yet"
+                    description="Add stringers to assign to jobs and show on dashboards."
+                  >
+                    <Button onClick={() => openStringerDialog()} size="sm" variant="outline" className="gap-2">
+                      <Plus className="w-4 h-4" />
+                      Add Your First Stringer
+                    </Button>
+                  </EmptyState>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {stringersList.map((stringer) => (
+                        <TableRow key={stringer.id} className="group">
+                          <TableCell className="font-medium">{stringer.name}</TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {stringer.created_at
+                              ? format(parseISO(stringer.created_at), 'MMM d, yyyy')
+                              : '—'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openStringerDialog(stringer)}
+                                className="opacity-60 group-hover:opacity-100"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setStringerToDelete(stringer);
+                                  setStringerDeleteDialogOpen(true);
+                                }}
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10 opacity-60 group-hover:opacity-100"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
 
@@ -1413,6 +1648,69 @@ export default function Admin() {
                 disabled={deleteStaffMutation.isPending}
               >
                 {deleteStaffMutation.isPending ? 'Removing…' : 'Remove'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Stringer Dialog (Add / Edit) */}
+        <Dialog
+          open={stringerDialogOpen}
+          onOpenChange={(open) => {
+            setStringerDialogOpen(open);
+            if (!open) {
+              setEditingStringer(null);
+              setStringerName('');
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{editingStringer ? 'Edit Stringer' : 'Add Stringer'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="stringerName">Name</Label>
+                <Input
+                  id="stringerName"
+                  value={stringerName}
+                  onChange={(e) => setStringerName(e.target.value)}
+                  placeholder="e.g., Stringer A, John"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={closeStringerDialog}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleStringerSubmit}
+                disabled={createStringerMutation.isPending || updateStringerMutation.isPending || !stringerName.trim()}
+              >
+                {editingStringer ? 'Save' : 'Add'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Stringer Confirmation */}
+        <AlertDialog open={stringerDeleteDialogOpen} onOpenChange={setStringerDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove stringer</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to remove &quot;{stringerToDelete?.name}&quot;? They will no longer appear in
+                the list. Existing jobs will keep the recorded assignment (stringer_id will be cleared).
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setStringerToDelete(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => stringerToDelete && deleteStringerMutation.mutate(stringerToDelete.id)}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteStringerMutation.isPending}
+              >
+                {deleteStringerMutation.isPending ? 'Removing…' : 'Remove'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

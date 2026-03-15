@@ -10,6 +10,12 @@ export interface FrontDeskStaff {
   created_at?: string | null;
 }
 
+export interface Stringer {
+  id: string;
+  name: string;
+  created_at?: string | null;
+}
+
 export interface StringOption {
   id: string;
   name: string;
@@ -46,6 +52,7 @@ export interface RacquetJob {
   // New fields
   service_type?: string | null;
   assigned_stringer?: string | null;
+  stringer_id?: string | null;
   racquet_max_tension_lbs?: number | null;
   requested_tension_lbs?: number | null;
   final_tension_lbs?: number | null;
@@ -58,6 +65,7 @@ export interface RacquetJob {
   updated_at: string;
   // Joined data
   strings?: StringOption | null;
+  stringers?: Stringer | null;
   status_events?: StatusEvent[] | null;
   payment_events?: PaymentEvent[] | null;
   job_attachments?: JobAttachment[] | null;
@@ -178,7 +186,8 @@ export interface RacquetJobFormData {
 // Add-on selections for intake form
 export interface IntakeAddOns {
   rushService: 'none' | '1-day' | '2-hour';
-  stringerOption: 'default' | 'stringer-a';
+  /** stringer_id from stringers table, or null for default */
+  stringerId: string | null;
   grommetRepair: boolean;
   stencilRequest: string;
   gripAddOn: boolean;

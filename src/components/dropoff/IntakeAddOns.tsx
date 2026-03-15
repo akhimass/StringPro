@@ -1,4 +1,4 @@
-import { IntakeAddOns as AddOns } from '@/types';
+import { IntakeAddOns as AddOns, Stringer } from '@/types';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import {
@@ -12,10 +12,14 @@ import {
 interface IntakeAddOnsProps {
   addOns: AddOns;
   onChange: (addOns: AddOns) => void;
+  /** Stringers from API (for dropdown); default stringer = no selection */
+  stringers: Stringer[];
+  stringersLoading?: boolean;
 }
 
-export function IntakeAddOnsSection({ addOns, onChange }: IntakeAddOnsProps) {
+export function IntakeAddOnsSection({ addOns, onChange, stringers, stringersLoading }: IntakeAddOnsProps) {
   const update = (partial: Partial<AddOns>) => onChange({ ...addOns, ...partial });
+  const stringerValue = addOns.stringerId ?? '';
 
   return (
     <div className="card-elevated p-6 space-y-4">
@@ -52,18 +56,21 @@ export function IntakeAddOnsSection({ addOns, onChange }: IntakeAddOnsProps) {
         <div className="space-y-2">
           <Label>Stringer Preference</Label>
           <Select
-            value={addOns.stringerOption}
-            onValueChange={(v) => update({ stringerOption: v as AddOns['stringerOption'] })}
+            value={stringerValue}
+            onValueChange={(v) => update({ stringerId: v === '' ? null : v })}
+            disabled={stringersLoading}
           >
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue placeholder={stringersLoading ? 'Loading…' : 'Select stringer'} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="default">Default Stringer</SelectItem>
-              <SelectItem value="stringer-a">
-                <span>Ouyang</span>{' '}
-                <span className="text-primary font-medium">+$10</span>
-              </SelectItem>
+              <SelectItem value="">Default Stringer</SelectItem>
+              {stringers.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  <span>{s.name}</span>{' '}
+                  <span className="text-primary font-medium">+$10</span>
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

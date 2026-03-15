@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMemo, useEffect } from 'react';
 import { normalizeUSPhone, isValidEmail } from '@/lib/validation';
-import { fetchStrings, fetchBrands, fetchFrontDeskStaff, createRacquet, uploadMultipleJobPhotos } from '@/lib/api';
+import { fetchStrings, fetchBrands, fetchFrontDeskStaff, fetchStringers, createRacquet, uploadMultipleJobPhotos } from '@/lib/api';
 import { supabaseConfigError } from '@/lib/supabase';
 import { RacquetFormData, IntakeAddOns } from '@/types';
 import { Header } from '@/components/Header';
@@ -93,7 +93,7 @@ export default function DropOff() {
   // Add-ons state
   const [addOns, setAddOns] = useState<IntakeAddOns>({
     rushService: 'none',
-    stringerOption: 'default',
+    stringerId: null,
     grommetRepair: false,
     stencilRequest: '',
     gripAddOn: false,
@@ -161,6 +161,27 @@ export default function DropOff() {
         return await fetchFrontDeskStaff();
       } catch (err) {
         if (import.meta.env.DEV && err) console.error('[StringPro] fetchFrontDeskStaff error', err);
+        throw err;
+      }
+    },
+    retry: 2,
+    staleTime: 30_000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+    refetchOnMount: 'always',
+  });
+
+  const {
+    data: stringers = [],
+    isLoading: stringersLoading,
+  } = useQuery({
+    queryKey: ['stringers'],
+    queryFn: async () => {
+      try {
+        return await fetchStringers();
+      } catch (err) {
+        if (import.meta.env.DEV && err) console.error('[StringPro] fetchStringers error', err);
         throw err;
       }
     },
@@ -324,7 +345,7 @@ export default function DropOff() {
     reset();
     setAddOns({
       rushService: 'none',
-      stringerOption: 'default',
+      stringerId: null,
       grommetRepair: false,
       stencilRequest: '',
       gripAddOn: false,
@@ -670,13 +691,19 @@ export default function DropOff() {
               <PhotoUploadSection files={intakePhotos} onChange={setIntakePhotos} />
 
               {/* Additional Services */}
-              <IntakeAddOnsSection addOns={addOns} onChange={setAddOns} />
+              <IntakeAddOnsSection
+                addOns={addOns}
+                onChange={setAddOns}
+                stringers={stringers}
+                stringersLoading={stringersLoading}
+              />
 
               {/* Price Summary */}
               <PriceSummaryCard
                 stringName={selectedStringLabel}
                 addOns={addOns}
                 stringExtra={selectedStringExtra}
+                stringerName={addOns.stringerId ? stringers.find((s) => s.id === addOns.stringerId)?.name : null}
               />
 
               {/* Waiver & Terms – Drop-Off Confirmation */}

@@ -3,7 +3,8 @@ import { IntakeAddOns } from '@/types';
 export const BASE_LABOR_FEE = 25;
 
 const RUSH_PRICES: Record<string, number> = { none: 0, '1-day': 10, '2-hour': 20 };
-const STRINGER_PRICES: Record<string, number> = { default: 0, 'stringer-a': 10 };
+/** Any chosen stringer (non-default) adds specialist fee */
+const STRINGER_SPECIALIST_FEE = 10;
 const ADDON_FEE = 5; // grommet repair, grip replacement
 
 export interface PricingInput {
@@ -32,7 +33,7 @@ export function computePricing(input: PricingInput): PricingBreakdown {
   const addOns = input.addOns;
 
   const rushFee = RUSH_PRICES[addOns?.rushService ?? 'none'] ?? 0;
-  const stringerFee = STRINGER_PRICES[addOns?.stringerOption ?? 'default'] ?? 0;
+  const stringerFee = addOns?.stringerId != null ? STRINGER_SPECIALIST_FEE : 0;
   const grommetFee = addOns?.grommetRepair ? ADDON_FEE : 0;
   const gripFee = addOns?.gripAddOn ? ADDON_FEE : 0;
 

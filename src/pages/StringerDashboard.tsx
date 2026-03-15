@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchRacquets,
+  fetchStringers,
   updateRacquetStatus,
 } from '@/lib/api';
 import { uploadMultipleJobPhotos } from '@/lib/attachments';
@@ -37,12 +38,14 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { Wrench, Paperclip, Camera, AlertTriangle } from 'lucide-react';
 
 export default function StringerDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [stringerFilter, setStringerFilter] = useState<string>('all');
+  const [monthYearFilter, setMonthYearFilter] = useState<string>('all');
   const queryClient = useQueryClient();
 
   // Complete dialog
@@ -61,6 +64,12 @@ export default function StringerDashboard() {
     retry: 1,
   });
 
+  const { data: stringers = [] } = useQuery({
+    queryKey: ['stringers'],
+    queryFn: fetchStringers,
+    retry: 1,
+  });
+
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: RacquetStatus }) =>
       updateRacquetStatus(id, status),
@@ -70,17 +79,41 @@ export default function StringerDashboard() {
     onError: () => toast.error('Failed to update status'),
   });
 
+  const monthYearOptions = (() => {
+    const set = new Set<string>();
+    racquets.forEach((r) => {
+      if (r.drop_in_date) {
+        try {
+          const d = parseISO(r.drop_in_date);
+          set.add(format(d, 'yyyy-MM'));
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  })();
+
   // Filter: only ready_for_stringing and received_by_stringer
   const stringerJobs = racquets.filter((r) => {
     const normalized = normalizeStatusKey(r.status);
     const isStringerRelevant = normalized === 'ready_for_stringing' || normalized === 'received_by_stringer';
-    const matchesStringer = stringerFilter === 'all' || r.assigned_stringer === stringerFilter;
+    const matchesStringer = stringerFilter === 'all' || r.stringer_id === stringerFilter;
+    const matchesMonthYear =
+      monthYearFilter === 'all' ||
+      (r.drop_in_date && (() => {
+        try {
+          return format(parseISO(r.drop_in_date), 'yyyy-MM') === monthYearFilter;
+        } catch {
+          return false;
+        }
+      })());
     const matchesSearch =
       searchQuery === '' ||
       r.member_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (r.racquet_type?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
       (r.ticket_number?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
-    return isStringerRelevant && matchesStringer && matchesSearch;
+    return isStringerRelevant && matchesStringer && matchesMonthYear && matchesSearch;
   });
 
   const getStringName = (job: RacquetJob): string => {
@@ -155,12 +188,30 @@ export default function StringerDashboard() {
             />
             <Select value={stringerFilter} onValueChange={setStringerFilter}>
               <SelectTrigger className="sm:w-48">
-                <SelectValue placeholder="Filter stringer" />
+                <SelectValue placeholder="Stringer" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Stringers</SelectItem>
-                <SelectItem value="A">Ouyang</SelectItem>
-                <SelectItem value="B">Stringer B</SelectItem>
+                {stringers.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={monthYearFilter} onValueChange={setMonthYearFilter}>
+              <SelectTrigger className="sm:w-40">
+                <SelectValue placeholder="Month - Year" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All months</SelectItem>
+                {monthYearOptions.map((ym) => {
+                  try {
+                    const [y, m] = ym.split('-');
+                    const label = format(new Date(Number(y), Number(m) - 1, 1), 'MMM yyyy');
+                    return <SelectItem key={ym} value={ym}>{label}</SelectItem>;
+                  } catch {
+                    return <SelectItem key={ym} value={ym}>{ym}</SelectItem>;
+                  }
+                })}
               </SelectContent>
             </Select>
           </div>
@@ -181,9 +232,10 @@ export default function StringerDashboard() {
                     <TableHead>Ticket</TableHead>
                     <TableHead>Customer</TableHead>
                     <TableHead>Racquet</TableHead>
+                    <TableHead>Drop-off date</TableHead>
+                    <TableHead>Month - Year</TableHead>
                     <TableHead>String</TableHead>
                     <TableHead>Tension</TableHead>
-                    <TableHead>Service</TableHead>
                     <TableHead>Stringer</TableHead>
                     <TableHead>Balance</TableHead>
                     <TableHead>Payment</TableHead>
@@ -207,6 +259,12 @@ export default function StringerDashboard() {
                         <TableCell className="font-medium">
                           {job.racquet_type?.replace(/\s+undefined\s*/gi, '').trim() || 'N/A'}
                         </TableCell>
+                        <TableCell className="text-sm">
+                          {job.drop_in_date ? (() => { try { return format(parseISO(job.drop_in_date), 'MMM d, yyyy'); } catch { return job.drop_in_date; } })() : 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {job.drop_in_date ? (() => { try { return format(parseISO(job.drop_in_date), 'MMM yyyy'); } catch { return '—'; } })() : '—'}
+                        </TableCell>
                         <TableCell className="text-sm">{getStringName(job)}</TableCell>
                         <TableCell className="text-sm">
                           {job.string_tension ? `${job.string_tension} lbs` : 'N/A'}
@@ -216,16 +274,9 @@ export default function StringerDashboard() {
                             </span>
                           )}
                         </TableCell>
-                        <TableCell>
-                          <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wide ${
-                            job.service_type === 'specialist'
-                              ? 'bg-status-pending-bg text-status-pending'
-                              : 'bg-muted text-muted-foreground'
-                          }`}>
-                            {job.service_type === 'specialist' ? 'Specialist' : 'Default'}
-                          </span>
+                        <TableCell className="text-sm">
+                          {job.stringers?.name?.trim() || job.assigned_stringer?.trim() || '—'}
                         </TableCell>
-                        <TableCell className="text-sm">{job.assigned_stringer || '—'}</TableCell>
                         <TableCell className="text-sm">
                           {balanceDue > 0 ? (
                             <span className="text-status-pending font-medium">${balanceDue.toFixed(2)}</span>

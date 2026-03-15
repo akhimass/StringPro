@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { StringOption, RacquetJob, RacquetFormData, RacquetStatus, IntakeAddOns, RacquetBrand, FrontDeskStaff } from '@/types';
+import { StringOption, RacquetJob, RacquetFormData, RacquetStatus, IntakeAddOns, RacquetBrand, FrontDeskStaff, Stringer } from '@/types';
 import { normalizeUSPhone } from '@/lib/validation';
 import { computeAmountDue } from '@/lib/pricing';
 
@@ -72,6 +72,42 @@ export const updateFrontDeskStaff = async (id: string, name: string): Promise<Fr
 
 export const deleteFrontDeskStaff = async (id: string): Promise<void> => {
   const { error } = await supabase.from('front_desk_staff' as any).delete().eq('id', id);
+  if (error) throw error;
+};
+
+// Stringers API (for dashboards and admin settings)
+export const fetchStringers = async (): Promise<Stringer[]> => {
+  const { data, error } = await supabase
+    .from('stringers' as any)
+    .select('*')
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return (data || []) as Stringer[];
+};
+
+export const createStringer = async (name: string): Promise<Stringer> => {
+  const { data, error } = await supabase
+    .from('stringers' as any)
+    .insert({ name: name.trim() })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Stringer;
+};
+
+export const updateStringer = async (id: string, name: string): Promise<Stringer> => {
+  const { data, error } = await supabase
+    .from('stringers' as any)
+    .update({ name: name.trim() })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Stringer;
+};
+
+export const deleteStringer = async (id: string): Promise<void> => {
+  const { error } = await supabase.from('stringers' as any).delete().eq('id', id);
   if (error) throw error;
 };
 
@@ -148,6 +184,7 @@ export const fetchRacquets = async (): Promise<RacquetJob[]> => {
     .select(`
       *,
       strings (*),
+      stringers (*),
       status_events (*),
       payment_events (*),
       job_attachments (*)
@@ -223,7 +260,8 @@ export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJ
   const addOns = formData.addOns;
   const amountDue = computeAmountDue({ addOns, stringExtra });
 
-  const serviceType = addOns?.stringerOption === 'stringer-a' ? 'specialist' : 'default';
+  const stringerId = addOns?.stringerId ?? null;
+  const serviceType = stringerId != null ? 'specialist' : 'default';
   const assignedStringer = serviceType === 'specialist' ? 'A' : null;
 
   const insertData = {
@@ -247,6 +285,7 @@ export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJ
     terms_accepted_at: new Date().toISOString(),
     service_type: serviceType,
     assigned_stringer: assignedStringer,
+    stringer_id: stringerId,
   };
 
   const { data, error } = await (supabase
@@ -314,9 +353,26 @@ export const updateRacquetStatus = async (id: string, status: RacquetStatus): Pr
     .from('racquet_jobs')
     .update(updatePayload)
     .eq('id', id)
-    .select(`*, strings (*)`)
+    .select(`*, strings (*), stringers (*)`)
     .single() as any);
 
+  if (error) throw error;
+  return data as unknown as RacquetJob;
+};
+
+/** Update assigned stringer for a job. */
+export const updateRacquetStringer = async (id: string, stringerId: string | null): Promise<RacquetJob> => {
+  const updatePayload: any = {
+    stringer_id: stringerId,
+    service_type: stringerId != null ? 'specialist' : 'default',
+    assigned_stringer: stringerId != null ? 'A' : null,
+  };
+  const { data, error } = await (supabase
+    .from('racquet_jobs')
+    .update(updatePayload)
+    .eq('id', id)
+    .select(`*, strings (*), stringers (*)`)
+    .single() as any);
   if (error) throw error;
   return data as unknown as RacquetJob;
 };
@@ -335,7 +391,7 @@ export const updateRacquetTension = async (
     .from('racquet_jobs')
     .update(patch as any)
     .eq('id', jobId)
-    .select(`*, strings (*), status_events (*), payment_events (*), job_attachments (*)`)
+    .select(`*, strings (*), stringers (*), status_events (*), payment_events (*), job_attachments (*)`)
     .single() as any);
 
   if (error) throw error;
