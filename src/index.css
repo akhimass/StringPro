@@ -91,4 +91,11 @@
   .card-elevated {
     @apply bg-card rounded-lg border shadow-sm;
   }
+
+  /* Dashboard table scroll: horizontal scrollbar at table section, not page bottom.
+   * Bounded height so the scrollbar is visible without scrolling the whole page (Windows/mouse). */
+  .table-scroll-viewport {
+    @apply min-w-0 max-w-full overflow-x-auto overflow-y-auto;
+    max-height: min(70vh, 640px);
+  }
 }
