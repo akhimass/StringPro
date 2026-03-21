@@ -9,20 +9,31 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { RacquetJob } from '@/types';
+import { RacquetJob, FrontDeskStaff } from '@/types';
 import { DollarSign } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface RecordPaymentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   racquet: RacquetJob | null;
+  frontDeskStaff: FrontDeskStaff[];
   onConfirm: (amount: number, staffName: string, paymentMethod?: string | null) => void;
 }
+
+const STAFF_NONE = '__none__';
 
 export function RecordPaymentDialog({
   open,
   onOpenChange,
   racquet,
+  frontDeskStaff,
   onConfirm,
 }: RecordPaymentDialogProps) {
   const amountDue = Number(racquet?.amount_due) || 0;
@@ -46,8 +57,11 @@ export function RecordPaymentDialog({
 
   const amountNum = parseFloat(amount) || 0;
   const paymentAmount = payFull ? balanceDue : amountNum;
+  const staffOk =
+    staffName.trim() !== '' &&
+    frontDeskStaff.some((s) => s.name === staffName.trim());
   const isValid =
-    staffName.trim() &&
+    staffOk &&
     (payFull ? balanceDue > 0 : amountNum > 0 && amountNum <= balanceDue);
 
   const handleConfirm = () => {
@@ -147,16 +161,30 @@ export function RecordPaymentDialog({
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="staffName">
-                  Staff Name <span className="text-destructive">*</span>
+                <Label>
+                  Front desk staff <span className="text-destructive">*</span>
                 </Label>
-                <Input
-                  id="staffName"
-                  value={staffName}
-                  onChange={(e) => setStaffName(e.target.value)}
-                  placeholder="Enter your name"
-                  maxLength={100}
-                />
+                <Select
+                  value={staffName || STAFF_NONE}
+                  onValueChange={(v) => setStaffName(v === STAFF_NONE ? '' : v)}
+                >
+                  <SelectTrigger id="staffName">
+                    <SelectValue placeholder="Select staff" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={STAFF_NONE}>Select staff…</SelectItem>
+                    {frontDeskStaff.map((s) => (
+                      <SelectItem key={s.id} value={s.name}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {frontDeskStaff.length === 0 && (
+                  <p className="text-xs text-destructive">
+                    Add staff in Manager → Settings → Front Desk Staff first.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -186,7 +214,7 @@ export function RecordPaymentDialog({
             Cancel
           </Button>
           {balanceDue > 0 && (
-            <Button onClick={handleConfirm} disabled={!isValid}>
+            <Button onClick={handleConfirm} disabled={!isValid || frontDeskStaff.length === 0}>
               Record Payment
             </Button>
           )}

@@ -22,7 +22,6 @@ import {
   updateStringer,
   deleteStringer,
   seedStarterStrings,
-  markReceivedByFrontDesk,
   recordPayment,
   markPickupCompleted,
   updateRacquetStringer,
@@ -36,10 +35,10 @@ import { EmptyState } from '@/components/EmptyState';
 import { TimelineDrawer } from '@/components/TimelineDrawer';
 import { PaymentStatusBadge } from '@/components/admin/PaymentStatusBadge';
 import { RecordPaymentDialog } from '@/components/admin/RecordPaymentDialog';
-import { FrontDeskReceiveDialog } from '@/components/admin/FrontDeskReceiveDialog';
 import { PickupCompleteDialog } from '@/components/admin/PickupCompleteDialog';
 import { AttachmentsDialog } from '@/components/admin/AttachmentsDialog';
 import { TensionDialog } from '@/components/admin/TensionDialog';
+import { ManagerAnalytics } from '@/components/admin/ManagerAnalytics';
 import { sendSmsReminder, isDay8ReminderEligible, isDay10ReminderEligible } from '@/lib/messaging';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -80,7 +79,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Package, Settings, Clock, AlertTriangle, ClipboardCheck, DollarSign, Paperclip, MessageSquare, Sliders } from 'lucide-react';
+import { Plus, Pencil, Trash2, Package, Settings, Clock, AlertTriangle, DollarSign, Paperclip, MessageSquare, Sliders, BarChart3 } from 'lucide-react';
 
 // Canonical status options for the manager status selector
 const statusOptions: { value: string; label: string }[] = [
@@ -99,6 +98,7 @@ export default function Admin() {
   const activeTab = searchParams.get('tab') || 'racquets';
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [monthYearFilter, setMonthYearFilter] = useState<string>('all');
+  const [stringerFilter, setStringerFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const queryClient = useQueryClient();
 
@@ -146,10 +146,6 @@ export default function Admin() {
   // Payment dialog state
   const [payDialogOpen, setPayDialogOpen] = useState(false);
   const [payRacquet, setPayRacquet] = useState<RacquetJob | null>(null);
-
-  // Front desk receive dialog state
-  const [receiveDialogOpen, setReceiveDialogOpen] = useState(false);
-  const [receiveRacquet, setReceiveRacquet] = useState<RacquetJob | null>(null);
 
   // Pickup complete dialog state
   const [pickupDialogOpen, setPickupDialogOpen] = useState(false);
@@ -479,7 +475,11 @@ export default function Admin() {
       r.member_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (r.racquet_type?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
       (r.ticket_number?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
-    return matchesStatus && matchesMonthYear && matchesSearch;
+    const matchesStringer =
+      stringerFilter === 'all' ||
+      (stringerFilter === 'default' && !r.stringer_id) ||
+      (stringerFilter !== 'all' && stringerFilter !== 'default' && r.stringer_id === stringerFilter);
+    return matchesStatus && matchesMonthYear && matchesSearch && matchesStringer;
   });
 
   // String dialog handlers
@@ -654,24 +654,6 @@ export default function Admin() {
     });
   };
 
-  // Front desk receive handler
-  const handleFrontDeskReceive = (staffName: string) => {
-    if (receiveRacquet) {
-      markReceivedByFrontDesk(receiveRacquet.id, staffName)
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: ['racquets'] });
-          toast.success(`Received by ${staffName} at front desk`);
-        })
-        .catch(() => {
-          toast.error('Failed to mark as received by front desk');
-        })
-        .finally(() => {
-          setReceiveDialogOpen(false);
-          setReceiveRacquet(null);
-        });
-    }
-  };
-
   // Pickup complete handler (block if not fully paid)
   const handlePickupComplete = (data: { paymentVerified: boolean; staffName: string; signature: string; notes: string }) => {
     if (pickupRacquet) {
@@ -746,6 +728,10 @@ export default function Admin() {
               <Package className="w-4 h-4" />
               Racquets
             </TabsTrigger>
+            <TabsTrigger value="analytics" className="gap-2">
+              <BarChart3 className="w-4 h-4" />
+              Analytics
+            </TabsTrigger>
             <TabsTrigger value="settings" className="gap-2">
               <Settings className="w-4 h-4" />
               Settings
@@ -791,6 +777,20 @@ export default function Admin() {
                     })}
                   </SelectContent>
                 </Select>
+                <Select value={stringerFilter} onValueChange={setStringerFilter}>
+                  <SelectTrigger className="sm:w-48">
+                    <SelectValue placeholder="Stringer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All stringers</SelectItem>
+                    <SelectItem value="default">Default stringer</SelectItem>
+                    {stringersList.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="min-w-0 max-w-full overflow-x-auto">
@@ -800,7 +800,7 @@ export default function Admin() {
                   <EmptyState
                     icon={Package}
                     title="No racquets found"
-                    description={searchQuery || statusFilter !== 'all'
+                    description={searchQuery || statusFilter !== 'all' || stringerFilter !== 'all' || monthYearFilter !== 'all'
                       ? 'Try adjusting your search or filter criteria.'
                       : 'Racquet orders will appear here once customers submit drop-offs.'}
                   />
@@ -903,10 +903,26 @@ export default function Admin() {
                                   Final: {racquet.final_tension_lbs} lbs
                                 </span>
                               )}
-                              {racquet.tension_override_lbs != null && (
-                                <span className="block text-[10px] text-status-pending">
-                                  Override: {racquet.tension_override_lbs} lbs
-                                  {racquet.tension_override_by && ` by ${racquet.tension_override_by}`}
+                              {(racquet.tension_override_lbs != null ||
+                                racquet.tension_override_by?.trim() ||
+                                racquet.tension_override_reason?.trim()) && (
+                                <span className="block text-[10px] text-status-pending mt-0.5 space-y-0.5">
+                                  <span className="block">
+                                    Override
+                                    {racquet.tension_override_lbs != null
+                                      ? `: ${racquet.tension_override_lbs} lbs`
+                                      : ''}
+                                  </span>
+                                  {racquet.tension_override_by?.trim() && (
+                                    <span className="block font-medium text-foreground">
+                                      {racquet.tension_override_by.trim()}
+                                    </span>
+                                  )}
+                                  {racquet.tension_override_reason?.trim() && (
+                                    <span className="block text-muted-foreground">
+                                      {racquet.tension_override_reason.trim()}
+                                    </span>
+                                  )}
                                 </span>
                               )}
                             </TableCell>
@@ -934,12 +950,33 @@ export default function Admin() {
                                 </SelectContent>
                               </Select>
                             </TableCell>
-                            {/* Paid + Balance */}
+                            {/* Paid + Balance + per-payment staff */}
                             <TableCell className="text-sm">
-                              <div className="space-y-0.5">
+                              <div className="space-y-1">
+                                {Array.isArray(racquet.payment_events) &&
+                                  racquet.payment_events.length > 0 &&
+                                  [...racquet.payment_events]
+                                    .sort(
+                                      (a, b) =>
+                                        new Date(a.created_at ?? 0).getTime() -
+                                        new Date(b.created_at ?? 0).getTime()
+                                    )
+                                    .map((pe) => (
+                                      <div
+                                        key={pe.id}
+                                        className="text-[10px] leading-tight border-b border-border/40 pb-1 last:border-0 last:pb-0"
+                                      >
+                                        <span className="font-medium">${Number(pe.amount).toFixed(2)}</span>
+                                        {pe.staff_name?.trim() && (
+                                          <span className="block text-muted-foreground">
+                                            {pe.staff_name.trim()}
+                                          </span>
+                                        )}
+                                      </div>
+                                    ))}
                                 {amountPaid > 0 && (
                                   <p className="text-[10px] text-muted-foreground">
-                                    Paid: ${amountPaid.toFixed(2)}
+                                    Total paid: ${amountPaid.toFixed(2)}
                                   </p>
                                 )}
                                 {balanceDue > 0 ? (
@@ -1040,20 +1077,6 @@ export default function Admin() {
                                   <Clock className="w-4 h-4" />
                                 </Button>
 
-                                {/* Front Desk Receive */}
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  title="Received by front desk"
-                                  onClick={() => {
-                                    setReceiveRacquet(racquet);
-                                    setReceiveDialogOpen(true);
-                                  }}
-                                  className="opacity-60 group-hover:opacity-100"
-                                >
-                                  <ClipboardCheck className="w-4 h-4" />
-                                </Button>
-
                                 {/* Record Payment (unpaid or partial) */}
                                 {canRecordPayment && (
                                   <Button
@@ -1140,6 +1163,16 @@ export default function Admin() {
                 )}
               </div>
             </div>
+          </TabsContent>
+
+          <TabsContent value="analytics" className="animate-fade-in">
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold">Analytics</h2>
+              <p className="text-sm text-muted-foreground">
+                Revenue, stringer output, strings usage, and front desk payment activity (filtered).
+              </p>
+            </div>
+            <ManagerAnalytics />
           </TabsContent>
 
           <TabsContent value="settings" className="animate-fade-in">
@@ -1793,15 +1826,8 @@ export default function Admin() {
           open={payDialogOpen}
           onOpenChange={setPayDialogOpen}
           racquet={payRacquet}
+          frontDeskStaff={frontDeskStaffList}
           onConfirm={handleRecordPayment}
-        />
-
-        {/* Front Desk Receive Dialog */}
-        <FrontDeskReceiveDialog
-          open={receiveDialogOpen}
-          onOpenChange={setReceiveDialogOpen}
-          racquet={receiveRacquet}
-          onConfirm={handleFrontDeskReceive}
         />
 
         {/* Pickup Complete Dialog */}
@@ -1824,6 +1850,7 @@ export default function Admin() {
           open={tensionDialogOpen}
           onOpenChange={setTensionDialogOpen}
           racquet={tensionRacquet}
+          frontDeskStaff={frontDeskStaffList}
           onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ['racquets'] });
           }}

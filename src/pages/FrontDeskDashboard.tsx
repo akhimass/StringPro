@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchRacquets,
+  fetchFrontDeskStaff,
   recordPayment,
   markPickupCompleted,
 } from '@/lib/api';
@@ -76,6 +77,12 @@ export default function FrontDeskDashboard() {
   const { data: racquets = [], isLoading, error } = useQuery({
     queryKey: ['racquets'],
     queryFn: fetchRacquets,
+    retry: 1,
+  });
+
+  const { data: frontDeskStaffList = [] } = useQuery({
+    queryKey: ['front_desk_staff'],
+    queryFn: fetchFrontDeskStaff,
     retry: 1,
   });
 
@@ -385,7 +392,13 @@ export default function FrontDeskDashboard() {
           </div>
         </div>
 
-        <RecordPaymentDialog open={payDialogOpen} onOpenChange={setPayDialogOpen} racquet={payRacquet} onConfirm={handleRecordPayment} />
+        <RecordPaymentDialog
+          open={payDialogOpen}
+          onOpenChange={setPayDialogOpen}
+          racquet={payRacquet}
+          frontDeskStaff={frontDeskStaffList}
+          onConfirm={handleRecordPayment}
+        />
         <PickupCompleteDialog open={pickupDialogOpen} onOpenChange={setPickupDialogOpen} racquet={pickupRacquet} onConfirm={handlePickupComplete} />
         <AttachmentsDialog open={attachDialogOpen} onOpenChange={setAttachDialogOpen} racquet={attachRacquet} />
 

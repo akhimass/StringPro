@@ -10,6 +10,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -19,7 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { RacquetJob } from '@/types';
+import { RacquetJob, FrontDeskStaff } from '@/types';
 import { sendTensionSms } from '@/lib/messaging';
 import { updateRacquetTension } from '@/lib/api';
 import { Sliders, MessageSquare } from 'lucide-react';
@@ -42,13 +49,18 @@ interface TensionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   racquet: RacquetJob | null;
+  /** Staff list from Settings → Front Desk; override must pick one of these names. */
+  frontDeskStaff: FrontDeskStaff[];
   onSuccess?: () => void;
 }
+
+const STAFF_NONE = '__none__';
 
 export function TensionDialog({
   open,
   onOpenChange,
   racquet,
+  frontDeskStaff,
   onSuccess,
 }: TensionDialogProps) {
   const [maxTension, setMaxTension] = useState('');
@@ -64,10 +76,12 @@ export function TensionDialog({
     if (racquet && open) {
       setMaxTension(racquet.racquet_max_tension_lbs != null ? String(racquet.racquet_max_tension_lbs) : '');
       setOverrideLbs(racquet.tension_override_lbs != null ? String(racquet.tension_override_lbs) : '');
-      setOverrideStaffName(racquet.tension_override_by ?? '');
+      const by = racquet.tension_override_by?.trim() ?? '';
+      const inList = frontDeskStaff.some((s) => s.name === by);
+      setOverrideStaffName(by && inList ? by : '');
       setOverrideReason(racquet.tension_override_reason ?? '');
     }
-  }, [racquet, open]);
+  }, [racquet, open, frontDeskStaff]);
 
   const requested = racquet?.requested_tension_lbs ?? (racquet?.string_tension != null ? Math.round(racquet.string_tension) : null);
   const finalFromJob = racquet?.final_tension_lbs ?? null;
@@ -109,8 +123,13 @@ export function TensionDialog({
       toast.error('Enter a valid final tension (number ≥ 0).');
       return;
     }
-    if (!overrideStaffName.trim()) {
-      toast.error('Staff name is required for override.');
+    const staff = overrideStaffName.trim();
+    if (!staff) {
+      toast.error('Select front desk staff for override.');
+      return;
+    }
+    if (!frontDeskStaff.some((s) => s.name === staff)) {
+      toast.error('Staff must match a name from Front Desk Staff (Settings).');
       return;
     }
     if (!overrideReason.trim()) {
@@ -121,7 +140,7 @@ export function TensionDialog({
     try {
       await updateRacquetTension(racquet.id, {
         tension_override_lbs: lbs,
-        tension_override_by: overrideStaffName.trim(),
+        tension_override_by: staff,
         tension_override_reason: overrideReason.trim(),
       });
       toast.success('Override saved.');
@@ -225,19 +244,38 @@ export function TensionDialog({
                   value={overrideLbs}
                   onChange={(e) => setOverrideLbs(e.target.value)}
                 />
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Front desk staff (required)</Label>
+                  <Select
+                    value={overrideStaffName || STAFF_NONE}
+                    onValueChange={(v) => setOverrideStaffName(v === STAFF_NONE ? '' : v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select staff" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={STAFF_NONE}>Select staff…</SelectItem>
+                      {frontDeskStaff.map((s) => (
+                        <SelectItem key={s.id} value={s.name}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {frontDeskStaff.length === 0 && (
+                    <p className="text-xs text-destructive">
+                      Add staff in Manager → Settings → Front Desk Staff first.
+                    </p>
+                  )}
+                </div>
                 <Input
-                  placeholder="Staff name"
-                  value={overrideStaffName}
-                  onChange={(e) => setOverrideStaffName(e.target.value)}
-                />
-                <Input
-                  placeholder="Reason"
+                  placeholder="Reason (required)"
                   value={overrideReason}
                   onChange={(e) => setOverrideReason(e.target.value)}
                 />
                 <Button
                   onClick={handleSaveOverride}
-                  disabled={savingOverride}
+                  disabled={savingOverride || frontDeskStaff.length === 0}
                 >
                   {savingOverride ? 'Saving…' : 'Save override'}
                 </Button>
