@@ -417,7 +417,7 @@ export default function DropOff() {
                     There are currently no strings available for selection. Please contact an administrator.
                   </p>
                   <Link
-                    to="/admin?tab=settings"
+                    to="/admin?tab=staffing"
                     className="text-sm text-primary hover:underline font-medium"
                   >
                     Admin → Settings → Strings

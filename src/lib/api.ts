@@ -10,6 +10,7 @@ import {
   Stringer,
   SignupAccessCode,
   SignupAccessCodeKind,
+  StaffDirectoryProfile,
 } from '@/types';
 import { normalizeUSPhone } from '@/lib/validation';
 import { computeAmountDue } from '@/lib/pricing';
@@ -50,40 +51,31 @@ export const deleteBrand = async (id: string): Promise<void> => {
   if (error) throw error;
 };
 
-// Front desk staff API (for drop-off form and admin settings)
+// Front desk picklist: real staff from profiles (front desk + combined role). Same shape as legacy for forms.
 export const fetchFrontDeskStaff = async (): Promise<FrontDeskStaff[]> => {
   const { data, error } = await supabase
-    .from('front_desk_staff' as any)
-    .select('*')
-    .order('name', { ascending: true });
+    .from('profiles' as any)
+    .select('id, full_name, role')
+    .in('role', ['frontdesk', 'frontdesk_stringer'])
+    .order('full_name', { ascending: true });
   if (error) throw error;
-  return (data || []) as FrontDeskStaff[];
+  const rows = (data || []) as { id: string; full_name: string | null; role: string }[];
+  return rows.map((p) => ({
+    id: p.id,
+    name: (p.full_name && p.full_name.trim()) ? p.full_name.trim() : 'Unnamed',
+    created_at: null,
+  }));
 };
 
-export const createFrontDeskStaff = async (name: string): Promise<FrontDeskStaff> => {
+/** Manager directory: all staff roles (for Staffing tab lists). */
+export const fetchStaffProfilesForDirectory = async (): Promise<StaffDirectoryProfile[]> => {
   const { data, error } = await supabase
-    .from('front_desk_staff' as any)
-    .insert({ name: name.trim() })
-    .select()
-    .single();
+    .from('profiles' as any)
+    .select('id, full_name, role')
+    .in('role', ['admin', 'frontdesk', 'stringer', 'frontdesk_stringer'])
+    .order('full_name', { ascending: true });
   if (error) throw error;
-  return data as FrontDeskStaff;
-};
-
-export const updateFrontDeskStaff = async (id: string, name: string): Promise<FrontDeskStaff> => {
-  const { data, error } = await supabase
-    .from('front_desk_staff' as any)
-    .update({ name: name.trim() })
-    .eq('id', id)
-    .select()
-    .single();
-  if (error) throw error;
-  return data as FrontDeskStaff;
-};
-
-export const deleteFrontDeskStaff = async (id: string): Promise<void> => {
-  const { error } = await supabase.from('front_desk_staff' as any).delete().eq('id', id);
-  if (error) throw error;
+  return (data || []) as StaffDirectoryProfile[];
 };
 
 // Stringers API (for dashboards and admin settings)
@@ -109,10 +101,16 @@ export const createStringer = async (name: string, extraCost?: number | null): P
   return data as Stringer;
 };
 
-export const updateStringer = async (id: string, name: string, extraCost?: number | null): Promise<Stringer> => {
-  const payload: { name: string; extra_cost?: number } = { name: name.trim() };
+export const updateStringer = async (
+  id: string,
+  name: string,
+  extraCost?: number | null,
+  options?: { skipName?: boolean }
+): Promise<Stringer> => {
   const cost = extraCost != null ? Number(extraCost) : 0;
-  if (Number.isFinite(cost) && cost >= 0) payload.extra_cost = cost;
+  const safeCost = Number.isFinite(cost) && cost >= 0 ? cost : 0;
+  const payload: { name?: string; extra_cost: number } = { extra_cost: safeCost };
+  if (!options?.skipName) payload.name = name.trim();
   const { data, error } = await supabase
     .from('stringers' as any)
     .update(payload)

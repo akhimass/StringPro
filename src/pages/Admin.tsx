@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -13,12 +13,8 @@ import {
   createBrand,
   updateBrand,
   deleteBrand,
-  fetchFrontDeskStaff,
-  createFrontDeskStaff,
-  updateFrontDeskStaff,
-  deleteFrontDeskStaff,
+  fetchStaffProfilesForDirectory,
   fetchStringers,
-  createStringer,
   updateStringer,
   deleteStringer,
   seedStarterStrings,
@@ -26,7 +22,16 @@ import {
   markPickupCompleted,
   updateRacquetStringer,
 } from '@/lib/api';
-import { RacquetStatus, StringOption, RacquetJob, RacquetBrand, FrontDeskStaff, Stringer, normalizeStatusKey } from '@/types';
+import {
+  RacquetStatus,
+  StringOption,
+  RacquetJob,
+  RacquetBrand,
+  FrontDeskStaff,
+  Stringer,
+  StaffDirectoryProfile,
+  normalizeStatusKey,
+} from '@/types';
 import { PickupCountdownBadge } from '@/components/PickupCountdownBadge';
 import { Header } from '@/components/Header';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -80,9 +85,40 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Package, Settings, Clock, AlertTriangle, DollarSign, Paperclip, MessageSquare, Sliders, BarChart3, KeyRound } from 'lucide-react';
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Package,
+  Settings,
+  Clock,
+  AlertTriangle,
+  DollarSign,
+  Paperclip,
+  MessageSquare,
+  Sliders,
+  BarChart3,
+  KeyRound,
+  Users,
+  Package2,
+} from 'lucide-react';
 
 // Canonical status options for the manager status selector
+function formatStaffRole(role: string): string {
+  switch (role) {
+    case 'frontdesk':
+      return 'Front desk';
+    case 'frontdesk_stringer':
+      return 'Front desk + stringer';
+    case 'stringer':
+      return 'Stringer';
+    case 'admin':
+      return 'Manager';
+    default:
+      return role;
+  }
+}
+
 const statusOptions: { value: string; label: string }[] = [
   { value: 'received_front_desk', label: 'Received by Front Desk' },
   { value: 'ready_for_stringing', label: 'Ready for Stringing' },
@@ -96,7 +132,8 @@ const statusOptions: { value: string; label: string }[] = [
 
 export default function Admin() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') || 'racquets';
+  const rawTab = searchParams.get('tab') || 'racquets';
+  const activeTab = rawTab === 'settings' ? 'staffing' : rawTab;
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [monthYearFilter, setMonthYearFilter] = useState<string>('all');
   const [stringerFilter, setStringerFilter] = useState<string>('all');
@@ -120,13 +157,6 @@ export default function Admin() {
   const [brandName, setBrandName] = useState('');
   const [brandToDelete, setBrandToDelete] = useState<RacquetBrand | null>(null);
   const [brandDeleteDialogOpen, setBrandDeleteDialogOpen] = useState(false);
-
-  // Front desk staff dialog state
-  const [staffDialogOpen, setStaffDialogOpen] = useState(false);
-  const [editingStaff, setEditingStaff] = useState<FrontDeskStaff | null>(null);
-  const [staffName, setStaffName] = useState('');
-  const [staffToDelete, setStaffToDelete] = useState<FrontDeskStaff | null>(null);
-  const [staffDeleteDialogOpen, setStaffDeleteDialogOpen] = useState(false);
 
   // Stringers dialog state
   const [stringerDialogOpen, setStringerDialogOpen] = useState(false);
@@ -214,11 +244,31 @@ export default function Admin() {
     retry: 1,
   });
 
-  const { data: frontDeskStaffList = [], isLoading: frontDeskStaffLoading } = useQuery({
-    queryKey: ['front_desk_staff'],
-    queryFn: fetchFrontDeskStaff,
+  const { data: staffDirectory = [], isLoading: staffDirectoryLoading } = useQuery({
+    queryKey: ['profiles', 'staff_directory'],
+    queryFn: fetchStaffProfilesForDirectory,
     retry: 1,
   });
+
+  const frontDeskStaffList: FrontDeskStaff[] = useMemo(() => {
+    return staffDirectory
+      .filter((p) => p.role === 'frontdesk' || p.role === 'frontdesk_stringer')
+      .map((p) => ({
+        id: p.id,
+        name: (p.full_name && p.full_name.trim()) ? p.full_name.trim() : 'Unnamed',
+        created_at: null,
+      }));
+  }, [staffDirectory]);
+
+  const staffingFrontDeskProfiles: StaffDirectoryProfile[] = useMemo(
+    () => staffDirectory.filter((p) => p.role === 'frontdesk' || p.role === 'frontdesk_stringer'),
+    [staffDirectory]
+  );
+
+  const staffingStringerProfiles: StaffDirectoryProfile[] = useMemo(
+    () => staffDirectory.filter((p) => p.role === 'stringer' || p.role === 'frontdesk_stringer'),
+    [staffDirectory]
+  );
 
   const { data: stringersList = [], isLoading: stringersLoading } = useQuery({
     queryKey: ['stringers'],
@@ -311,59 +361,21 @@ export default function Admin() {
     onError: (e: Error) => toast.error(e?.message ?? 'Failed to delete brand'),
   });
 
-  const createStaffMutation = useMutation({
-    mutationFn: (name: string) => createFrontDeskStaff(name),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['front_desk_staff'] });
-      toast.success('Front desk staff added');
-      setStaffDialogOpen(false);
-      setStaffName('');
-      setEditingStaff(null);
-    },
-    onError: (e: Error) => toast.error(e?.message ?? 'Failed to add front desk staff'),
-  });
-
-  const updateStaffMutation = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => updateFrontDeskStaff(id, name),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['front_desk_staff'] });
-      toast.success('Front desk staff updated');
-      setStaffDialogOpen(false);
-      setStaffName('');
-      setEditingStaff(null);
-    },
-    onError: (e: Error) => toast.error(e?.message ?? 'Failed to update front desk staff'),
-  });
-
-  const deleteStaffMutation = useMutation({
-    mutationFn: (id: string) => deleteFrontDeskStaff(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['front_desk_staff'] });
-      toast.success('Front desk staff removed');
-      setStaffDeleteDialogOpen(false);
-      setStaffToDelete(null);
-    },
-    onError: (e: Error) => toast.error(e?.message ?? 'Failed to remove front desk staff'),
-  });
-
-  const createStringerMutation = useMutation({
-    mutationFn: ({ name, extraCost }: { name: string; extraCost?: number | null }) => createStringer(name, extraCost),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stringers'] });
-      toast.success('Stringer added');
-      setStringerDialogOpen(false);
-      setStringerName('');
-      setStringerExtraCost('');
-      setEditingStringer(null);
-    },
-    onError: (e: Error) => toast.error(e?.message ?? 'Failed to add stringer'),
-  });
-
   const updateStringerMutation = useMutation({
-    mutationFn: ({ id, name, extraCost }: { id: string; name: string; extraCost?: number | null }) =>
-      updateStringer(id, name, extraCost),
+    mutationFn: ({
+      id,
+      name,
+      extraCost,
+      skipName,
+    }: {
+      id: string;
+      name: string;
+      extraCost?: number | null;
+      skipName?: boolean;
+    }) => updateStringer(id, name, extraCost, { skipName }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stringers'] });
+      queryClient.invalidateQueries({ queryKey: ['profiles', 'staff_directory'] });
       toast.success('Stringer updated');
       setStringerDialogOpen(false);
       setStringerName('');
@@ -377,6 +389,7 @@ export default function Admin() {
     mutationFn: (id: string) => deleteStringer(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stringers'] });
+      queryClient.invalidateQueries({ queryKey: ['profiles', 'staff_directory'] });
       toast.success('Stringer removed');
       setStringerDeleteDialogOpen(false);
       setStringerToDelete(null);
@@ -571,50 +584,14 @@ export default function Admin() {
     }
   };
 
-  const openStaffDialog = (staff?: FrontDeskStaff) => {
-    if (staff) {
-      setEditingStaff(staff);
-      setStaffName(staff.name);
-    } else {
-      setEditingStaff(null);
-      setStaffName('');
-    }
-    setStaffDialogOpen(true);
-  };
-
-  const closeStaffDialog = () => {
-    setStaffDialogOpen(false);
-    setEditingStaff(null);
-    setStaffName('');
-  };
-
-  const handleStaffSubmit = () => {
-    const name = staffName.trim();
-    if (!name) {
-      toast.error('Enter a name');
-      return;
-    }
-    if (editingStaff) {
-      updateStaffMutation.mutate({ id: editingStaff.id, name });
-    } else {
-      createStaffMutation.mutate(name);
-    }
-  };
-
-  const openStringerDialog = (stringer?: Stringer) => {
-    if (stringer) {
-      setEditingStringer(stringer);
-      setStringerName(stringer.name);
-      setStringerExtraCost(
-        stringer.extra_cost != null && Number.isFinite(stringer.extra_cost)
-          ? String(stringer.extra_cost)
-          : '0'
-      );
-    } else {
-      setEditingStringer(null);
-      setStringerName('');
-      setStringerExtraCost('0');
-    }
+  const openStringerDialog = (stringer: Stringer) => {
+    setEditingStringer(stringer);
+    setStringerName(stringer.name);
+    setStringerExtraCost(
+      stringer.extra_cost != null && Number.isFinite(stringer.extra_cost)
+        ? String(stringer.extra_cost)
+        : '0'
+    );
     setStringerDialogOpen(true);
   };
 
@@ -626,18 +603,21 @@ export default function Admin() {
   };
 
   const handleStringerSubmit = () => {
+    if (!editingStringer) return;
     const name = stringerName.trim();
-    if (!name) {
+    if (!editingStringer.profile_id && !name) {
       toast.error('Enter a name');
       return;
     }
     const extraCost = stringerExtraCost.trim() === '' ? 0 : parseFloat(stringerExtraCost);
     const extraCostVal = Number.isFinite(extraCost) && extraCost >= 0 ? extraCost : 0;
-    if (editingStringer) {
-      updateStringerMutation.mutate({ id: editingStringer.id, name, extraCost: extraCostVal });
-    } else {
-      createStringerMutation.mutate({ name, extraCost: extraCostVal });
-    }
+    const displayName = editingStringer.profile_id ? editingStringer.name : name;
+    updateStringerMutation.mutate({
+      id: editingStringer.id,
+      name: displayName,
+      extraCost: extraCostVal,
+      skipName: !!editingStringer.profile_id,
+    });
   };
 
   // Payment handler (Record Payment dialog) — dialog closes and state clears in mutation onSuccess
@@ -733,9 +713,13 @@ export default function Admin() {
               <BarChart3 className="w-4 h-4" />
               Analytics
             </TabsTrigger>
-            <TabsTrigger value="settings" className="gap-2">
-              <Settings className="w-4 h-4" />
-              Settings
+            <TabsTrigger value="staffing" className="gap-2">
+              <Users className="w-4 h-4" />
+              Staffing
+            </TabsTrigger>
+            <TabsTrigger value="inventory" className="gap-2">
+              <Package2 className="w-4 h-4" />
+              Inventory
             </TabsTrigger>
           </TabsList>
 
@@ -1176,7 +1160,7 @@ export default function Admin() {
             <ManagerAnalytics />
           </TabsContent>
 
-          <TabsContent value="settings" className="animate-fade-in space-y-6">
+          <TabsContent value="staffing" className="animate-fade-in space-y-6">
             <div className="card-elevated">
               <div className="p-4 border-b flex items-center gap-2">
                 <KeyRound className="w-5 h-5 text-primary" />
@@ -1192,6 +1176,177 @@ export default function Admin() {
               </div>
             </div>
 
+            <div className="card-elevated">
+              <div className="p-4 border-b">
+                <h2 className="font-semibold">Front desk staff</h2>
+                <p className="text-sm text-muted-foreground">
+                  Pulled from club accounts with a front desk or combined (front desk + stringer) role. Same people appear
+                  in the drop-off waiver and payment flows.
+                </p>
+              </div>
+              <div className="p-4 min-w-0 overflow-x-auto">
+                {staffDirectoryLoading ? (
+                  <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
+                ) : staffingFrontDeskProfiles.length === 0 ? (
+                  <EmptyState
+                    icon={Users}
+                    title="No front desk staff yet"
+                    description="Invite teammates with a front desk or combined access code (Staff access codes above), then have them create an account."
+                  />
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Role</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {staffingFrontDeskProfiles.map((p) => (
+                        <TableRow key={p.id}>
+                          <TableCell className="font-medium">
+                            {(p.full_name && p.full_name.trim()) ? p.full_name.trim() : 'Unnamed'}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{formatStaffRole(p.role)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            </div>
+
+            <div className="card-elevated">
+              <div className="p-4 border-b">
+                <h2 className="font-semibold">Stringers</h2>
+                <p className="text-sm text-muted-foreground">
+                  Pulled from accounts with a stringer or combined role (they also appear under front desk if they have
+                  both). Specialist fee is edited on the linked catalog row.
+                </p>
+              </div>
+              <div className="p-4 space-y-8 min-w-0 overflow-x-auto">
+                {staffDirectoryLoading || stringersLoading ? (
+                  <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
+                ) : (
+                  <>
+                    <div>
+                      <h3 className="text-sm font-medium mb-2">Accounts</h3>
+                      {staffingStringerProfiles.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No stringer accounts yet.</p>
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Name</TableHead>
+                              <TableHead>Role</TableHead>
+                              <TableHead>Specialist fee</TableHead>
+                              <TableHead className="text-right">Catalog</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {staffingStringerProfiles.map((p) => {
+                              const cat = stringersList.find((s) => s.profile_id === p.id);
+                              return (
+                                <TableRow key={p.id}>
+                                  <TableCell className="font-medium">
+                                    {(p.full_name && p.full_name.trim()) ? p.full_name.trim() : 'Unnamed'}
+                                  </TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">{formatStaffRole(p.role)}</TableCell>
+                                  <TableCell className="text-sm">
+                                    {cat && cat.extra_cost != null && Number(cat.extra_cost) > 0
+                                      ? `+$${Number(cat.extra_cost).toFixed(2)}`
+                                      : '—'}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {cat ? (
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        title="Edit specialist fee"
+                                        onClick={() => openStringerDialog(cat)}
+                                      >
+                                        <Pencil className="w-4 h-4" />
+                                      </Button>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">Pending sync</span>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </div>
+
+                    {stringersList.some((s) => !s.profile_id) && (
+                      <div>
+                        <h3 className="text-sm font-medium mb-2">Legacy catalog (no linked login)</h3>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          Kept for older jobs. Prefer staff accounts for new stringers.
+                        </p>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Name</TableHead>
+                              <TableHead>Extra cost</TableHead>
+                              <TableHead>Created</TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {stringersList
+                              .filter((s) => !s.profile_id)
+                              .map((stringer) => (
+                                <TableRow key={stringer.id} className="group">
+                                  <TableCell className="font-medium">{stringer.name}</TableCell>
+                                  <TableCell className="text-sm">
+                                    {stringer.extra_cost != null && Number(stringer.extra_cost) > 0
+                                      ? `+$${Number(stringer.extra_cost).toFixed(2)}`
+                                      : '—'}
+                                  </TableCell>
+                                  <TableCell className="text-muted-foreground text-sm">
+                                    {stringer.created_at
+                                      ? format(parseISO(stringer.created_at), 'MMM d, yyyy')
+                                      : '—'}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => openStringerDialog(stringer)}
+                                        className="opacity-60 group-hover:opacity-100"
+                                      >
+                                        <Pencil className="w-4 h-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => {
+                                          setStringerToDelete(stringer);
+                                          setStringerDeleteDialogOpen(true);
+                                        }}
+                                        className="text-destructive hover:text-destructive hover:bg-destructive/10 opacity-60 group-hover:opacity-100"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="inventory" className="animate-fade-in space-y-6">
             <div className="card-elevated">
               <div className="p-4 border-b flex items-center justify-between">
                 <div>
@@ -1293,8 +1448,7 @@ export default function Admin() {
               </div>
             </div>
 
-            {/* Racquet Brands */}
-            <div className="card-elevated mt-6">
+            <div className="card-elevated">
               <div className="p-4 border-b flex items-center justify-between">
                 <div>
                   <h2 className="font-semibold">Racquet Brands</h2>
@@ -1353,162 +1507,6 @@ export default function Admin() {
                                 onClick={() => {
                                   setBrandToDelete(brand);
                                   setBrandDeleteDialogOpen(true);
-                                }}
-                                className="text-destructive hover:text-destructive hover:bg-destructive/10 opacity-60 group-hover:opacity-100"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </div>
-            </div>
-
-            {/* Front Desk Staff */}
-            <div className="card-elevated mt-6">
-              <div className="p-4 border-b flex items-center justify-between">
-                <div>
-                  <h2 className="font-semibold">Front Desk Staff</h2>
-                  <p className="text-sm text-muted-foreground">Staff who can receive drop-offs (waiver section)</p>
-                </div>
-                <Button onClick={() => openStaffDialog()} size="sm" className="gap-2">
-                  <Plus className="w-4 h-4" />
-                  Add Staff
-                </Button>
-              </div>
-              <div className="min-w-0 max-w-full overflow-x-auto">
-                {frontDeskStaffLoading ? (
-                  <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
-                ) : frontDeskStaffList.length === 0 ? (
-                  <EmptyState
-                    icon={Settings}
-                    title="No front desk staff yet"
-                    description="Add staff names to show in the drop-off waiver section."
-                  >
-                    <Button onClick={() => openStaffDialog()} size="sm" variant="outline" className="gap-2">
-                      <Plus className="w-4 h-4" />
-                      Add Your First Staff
-                    </Button>
-                  </EmptyState>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Created</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {frontDeskStaffList.map((staff) => (
-                        <TableRow key={staff.id} className="group">
-                          <TableCell className="font-medium">{staff.name}</TableCell>
-                          <TableCell className="text-muted-foreground text-sm">
-                            {staff.created_at
-                              ? format(parseISO(staff.created_at), 'MMM d, yyyy')
-                              : '—'}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openStaffDialog(staff)}
-                                className="opacity-60 group-hover:opacity-100"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  setStaffToDelete(staff);
-                                  setStaffDeleteDialogOpen(true);
-                                }}
-                                className="text-destructive hover:text-destructive hover:bg-destructive/10 opacity-60 group-hover:opacity-100"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </div>
-            </div>
-
-            {/* Stringers */}
-            <div className="card-elevated mt-6">
-              <div className="p-4 border-b flex items-center justify-between">
-                <div>
-                  <h2 className="font-semibold">Stringers</h2>
-                  <p className="text-sm text-muted-foreground">Stringers shown on dashboards; assign to jobs for specialist service.</p>
-                </div>
-                <Button onClick={() => openStringerDialog()} size="sm" className="gap-2">
-                  <Plus className="w-4 h-4" />
-                  Add Stringer
-                </Button>
-              </div>
-              <div className="min-w-0 max-w-full overflow-x-auto">
-                {stringersLoading ? (
-                  <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
-                ) : stringersList.length === 0 ? (
-                  <EmptyState
-                    icon={Settings}
-                    title="No stringers yet"
-                    description="Add stringers to assign to jobs and show on dashboards."
-                  >
-                    <Button onClick={() => openStringerDialog()} size="sm" variant="outline" className="gap-2">
-                      <Plus className="w-4 h-4" />
-                      Add Your First Stringer
-                    </Button>
-                  </EmptyState>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Extra cost</TableHead>
-                        <TableHead>Created</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {stringersList.map((stringer) => (
-                        <TableRow key={stringer.id} className="group">
-                          <TableCell className="font-medium">{stringer.name}</TableCell>
-                          <TableCell className="text-sm">
-                            {stringer.extra_cost != null && Number(stringer.extra_cost) > 0
-                              ? `+$${Number(stringer.extra_cost).toFixed(2)}`
-                              : '—'}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-sm">
-                            {stringer.created_at
-                              ? format(parseISO(stringer.created_at), 'MMM d, yyyy')
-                              : '—'}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openStringerDialog(stringer)}
-                                className="opacity-60 group-hover:opacity-100"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  setStringerToDelete(stringer);
-                                  setStringerDeleteDialogOpen(true);
                                 }}
                                 className="text-destructive hover:text-destructive hover:bg-destructive/10 opacity-60 group-hover:opacity-100"
                               >
@@ -1658,69 +1656,6 @@ export default function Admin() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Front Desk Staff Dialog (Add / Edit) */}
-        <Dialog
-          open={staffDialogOpen}
-          onOpenChange={(open) => {
-            setStaffDialogOpen(open);
-            if (!open) {
-              setEditingStaff(null);
-              setStaffName('');
-            }
-          }}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{editingStaff ? 'Edit Front Desk Staff' : 'Add Front Desk Staff'}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="staffName">Name</Label>
-                <Input
-                  id="staffName"
-                  value={staffName}
-                  onChange={(e) => setStaffName(e.target.value)}
-                  placeholder="e.g., Manager, Front Desk Member A"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={closeStaffDialog}>
-                Cancel
-              </Button>
-              <Button
-                onClick={handleStaffSubmit}
-                disabled={createStaffMutation.isPending || updateStaffMutation.isPending || !staffName.trim()}
-              >
-                {editingStaff ? 'Save' : 'Add'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Delete Front Desk Staff Confirmation */}
-        <AlertDialog open={staffDeleteDialogOpen} onOpenChange={setStaffDeleteDialogOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Remove front desk staff</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to remove &quot;{staffToDelete?.name}&quot;? They will no longer appear in the
-                drop-off waiver dropdown. Existing jobs will keep the recorded name.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setStaffToDelete(null)}>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => staffToDelete && deleteStaffMutation.mutate(staffToDelete.id)}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                disabled={deleteStaffMutation.isPending}
-              >
-                {deleteStaffMutation.isPending ? 'Removing…' : 'Remove'}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
         {/* Stringer Dialog (Add / Edit) */}
         <Dialog
           open={stringerDialogOpen}
@@ -1735,7 +1670,13 @@ export default function Admin() {
         >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{editingStringer ? 'Edit Stringer' : 'Add Stringer'}</DialogTitle>
+              <DialogTitle>
+                {editingStringer?.profile_id
+                  ? 'Specialist fee (linked account)'
+                  : editingStringer
+                    ? 'Edit stringer (legacy)'
+                    : 'Stringer'}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
@@ -1745,7 +1686,11 @@ export default function Admin() {
                   value={stringerName}
                   onChange={(e) => setStringerName(e.target.value)}
                   placeholder="e.g., Stringer A, Ouyang"
+                  disabled={!!editingStringer?.profile_id}
                 />
+                {editingStringer?.profile_id && (
+                  <p className="text-xs text-muted-foreground">Name comes from the staff account profile.</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="stringerExtraCost">Extra cost ($)</Label>
@@ -1767,9 +1712,13 @@ export default function Admin() {
               </Button>
               <Button
                 onClick={handleStringerSubmit}
-                disabled={createStringerMutation.isPending || updateStringerMutation.isPending || !stringerName.trim()}
+                disabled={
+                  updateStringerMutation.isPending ||
+                  !editingStringer ||
+                  (!editingStringer.profile_id && !stringerName.trim())
+                }
               >
-                {editingStringer ? 'Save' : 'Add'}
+                Save
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1781,8 +1730,17 @@ export default function Admin() {
             <AlertDialogHeader>
               <AlertDialogTitle>Remove stringer</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to remove &quot;{stringerToDelete?.name}&quot;? They will no longer appear in
-                the list. Existing jobs will keep the recorded assignment (stringer_id will be cleared).
+                {stringerToDelete?.profile_id ? (
+                  <>
+                    This stringer is linked to a staff account. Remove the catalog row only if you are retiring legacy
+                    data; linked accounts should be managed via roles instead.
+                  </>
+                ) : (
+                  <>
+                    Are you sure you want to remove &quot;{stringerToDelete?.name}&quot;? They will no longer appear in
+                    the list. Existing jobs will keep the recorded assignment (stringer_id will be cleared).
+                  </>
+                )}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -1790,7 +1748,7 @@ export default function Admin() {
               <AlertDialogAction
                 onClick={() => stringerToDelete && deleteStringerMutation.mutate(stringerToDelete.id)}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                disabled={deleteStringerMutation.isPending}
+                disabled={deleteStringerMutation.isPending || !!stringerToDelete?.profile_id}
               >
                 {deleteStringerMutation.isPending ? 'Removing…' : 'Remove'}
               </AlertDialogAction>

@@ -27,6 +27,15 @@ export interface Stringer {
   /** Extra fee in dollars when this stringer is selected (e.g. 10 for +$10). */
   extra_cost?: number | null;
   created_at?: string | null;
+  /** When set, this catalog row is tied to a staff profile (name managed via account). */
+  profile_id?: string | null;
+}
+
+/** Staff rows visible in Manager → Staffing (from profiles). */
+export interface StaffDirectoryProfile {
+  id: string;
+  full_name: string | null;
+  role: string;
 }
 
 export interface StringOption {
