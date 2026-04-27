@@ -8,9 +8,25 @@ interface ProtectedRouteProps {
   allowedRoles: ProfileRole[];
 }
 
+/** Default app path for a profile role (staff dashboards vs public drop-off). */
+export function homePathForRole(role: ProfileRole | null): string {
+  switch (role) {
+    case 'admin':
+      return '/admin';
+    case 'frontdesk':
+      return '/frontdesk';
+    case 'stringer':
+      return '/stringer';
+    case 'frontdesk_stringer':
+      return '/frontdesk';
+    default:
+      return '/';
+  }
+}
+
 /**
  * If no session -> redirect to /login.
- * If session but role not in allowedRoles -> redirect to /.
+ * If session but role not allowed -> redirect to that user's home (not always `/`).
  */
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { session, role, loading } = useAuth();
@@ -29,7 +45,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   }
 
   if (role == null || !allowedRoles.includes(role)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={homePathForRole(role)} replace />;
   }
 
   return <>{children}</>;

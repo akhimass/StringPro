@@ -1,5 +1,16 @@
 import { supabase } from '@/lib/supabase';
-import { StringOption, RacquetJob, RacquetFormData, RacquetStatus, IntakeAddOns, RacquetBrand, FrontDeskStaff, Stringer } from '@/types';
+import {
+  StringOption,
+  RacquetJob,
+  RacquetFormData,
+  RacquetStatus,
+  IntakeAddOns,
+  RacquetBrand,
+  FrontDeskStaff,
+  Stringer,
+  SignupAccessCode,
+  SignupAccessCodeKind,
+} from '@/types';
 import { normalizeUSPhone } from '@/lib/validation';
 import { computeAmountDue } from '@/lib/pricing';
 
@@ -554,6 +565,91 @@ export const deleteRacquet = async (id: string): Promise<void> => {
     .eq('id', id);
 
   if (error) throw error;
+};
+
+// ---------- Staff sign-up & access codes (Manager generates; staff redeem on Sign up) ----------
+
+function randomHexAccessCode(): string {
+  const a = new Uint8Array(8);
+  crypto.getRandomValues(a);
+  return Array.from(a, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export const fetchSignupAccessCodes = async (): Promise<SignupAccessCode[]> => {
+  const { data, error } = await (supabase
+    .from('signup_access_codes' as any)
+    .select('*')
+    .order('created_at', { ascending: false }) as any);
+  if (error) throw error;
+  return (data || []) as SignupAccessCode[];
+};
+
+export const createSignupAccessCode = async (
+  kind: SignupAccessCodeKind,
+  usesRemaining: number
+): Promise<SignupAccessCode> => {
+  if (!(usesRemaining >= 1)) throw new Error('Uses must be at least 1');
+  const { data: userData } = await supabase.auth.getUser();
+  const code = randomHexAccessCode();
+  const { data, error } = await (supabase
+    .from('signup_access_codes' as any)
+    .insert({
+      code,
+      code_kind: kind,
+      uses_remaining: usesRemaining,
+      created_by: userData.user?.id ?? null,
+    } as any)
+    .select()
+    .single() as any);
+  if (error) throw error;
+  return data as SignupAccessCode;
+};
+
+export const deleteSignupAccessCode = async (id: string): Promise<void> => {
+  const { error } = await (supabase.from('signup_access_codes' as any).delete().eq('id', id) as any);
+  if (error) throw error;
+};
+
+export type CompleteSignupInput = {
+  firstName: string;
+  lastName: string;
+  wantManager: boolean;
+  wantFrontDesk: boolean;
+  wantStringer: boolean;
+  codeManager: string;
+  codeFrontDesk: string;
+  codeStringer: string;
+  codeFrontdeskStringer: string;
+};
+
+/**
+ * After supabase.auth.signUp returns a session, call this to assign `profiles.role` from validated codes.
+ */
+export const completeSignupWithCodes = async (input: CompleteSignupInput): Promise<string> => {
+  const { data, error } = await (supabase.rpc('complete_signup_with_codes' as any, {
+    p_first_name: input.firstName.trim(),
+    p_last_name: input.lastName.trim(),
+    p_want_manager: input.wantManager,
+    p_want_front_desk: input.wantFrontDesk,
+    p_want_stringer: input.wantStringer,
+    p_code_manager: input.codeManager.trim() || null,
+    p_code_front_desk: input.codeFrontDesk.trim() || null,
+    p_code_stringer: input.codeStringer.trim() || null,
+    p_code_frontdesk_stringer: input.codeFrontdeskStringer.trim() || null,
+  }) as any);
+  if (error) {
+    const msg = error.message || '';
+    if (msg.includes('invalid_manager_code')) throw new Error('Invalid manager access code');
+    if (msg.includes('invalid_combined_code')) throw new Error('Invalid front desk + stringer access code');
+    if (msg.includes('invalid_front_desk_code')) throw new Error('Invalid front desk access code');
+    if (msg.includes('invalid_stringer_code')) throw new Error('Invalid stringer access code');
+    if (msg.includes('name_required')) throw new Error('First and last name are required');
+    if (msg.includes('no_role_selected')) throw new Error('Select at least one account type');
+    if (msg.includes('not_authenticated')) throw new Error('Not signed in. Try again or sign in to finish setup.');
+    if (msg.includes('profile_not_found')) throw new Error('Profile not found. Contact support.');
+    throw error;
+  }
+  return data as string;
 };
 
 // Photo upload helpers (public bucket racquet-photos; paths jobs/<job_id>/intake|completed|issue/<uuid>.<ext>)

@@ -39,6 +39,7 @@ import { PickupCompleteDialog } from '@/components/admin/PickupCompleteDialog';
 import { AttachmentsDialog } from '@/components/admin/AttachmentsDialog';
 import { TensionDialog } from '@/components/admin/TensionDialog';
 import { ManagerAnalytics } from '@/components/admin/ManagerAnalytics';
+import { AccessCodesPanel } from '@/components/admin/AccessCodesPanel';
 import { sendSmsReminder, isDay8ReminderEligible, isDay10ReminderEligible } from '@/lib/messaging';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -79,7 +80,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Package, Settings, Clock, AlertTriangle, DollarSign, Paperclip, MessageSquare, Sliders, BarChart3 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Package, Settings, Clock, AlertTriangle, DollarSign, Paperclip, MessageSquare, Sliders, BarChart3, KeyRound } from 'lucide-react';
 
 // Canonical status options for the manager status selector
 const statusOptions: { value: string; label: string }[] = [
@@ -1175,7 +1176,22 @@ export default function Admin() {
             <ManagerAnalytics />
           </TabsContent>
 
-          <TabsContent value="settings" className="animate-fade-in">
+          <TabsContent value="settings" className="animate-fade-in space-y-6">
+            <div className="card-elevated">
+              <div className="p-4 border-b flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-primary" />
+                <div>
+                  <h2 className="font-semibold">Staff access codes</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Invite codes for the Sign up page (manager, front desk, stringer, or both).
+                  </p>
+                </div>
+              </div>
+              <div className="p-4">
+                <AccessCodesPanel />
+              </div>
+            </div>
+
             <div className="card-elevated">
               <div className="p-4 border-b flex items-center justify-between">
                 <div>

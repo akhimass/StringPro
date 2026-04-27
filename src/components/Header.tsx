@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { hasFrontDeskDashboardAccess, hasManagerAccess, hasStringerDashboardAccess, isStaffRole } from '@/lib/staffRoles';
 
 function RacquetIcon({ className }: { className?: string }) {
   return (
@@ -39,12 +40,12 @@ export function Header() {
   const navigate = useNavigate();
   const { session, role, loading, signOut } = useAuth();
 
-  const isStaff = !loading && (role === 'admin' || role === 'frontdesk' || role === 'stringer');
+  const isStaff = !loading && isStaffRole(role);
   const navItems: { path: string; label: string }[] = [link('/', 'Drop-Off')];
   if (isStaff) {
-    if (role === 'admin') navItems.push(link('/admin', 'Manager'));
-    if (role === 'admin' || role === 'stringer') navItems.push(link('/stringer', 'Stringer'));
-    if (role === 'admin' || role === 'frontdesk') navItems.push(link('/frontdesk', 'Front Desk'));
+    if (hasManagerAccess(role)) navItems.push(link('/admin', 'Manager'));
+    if (hasStringerDashboardAccess(role)) navItems.push(link('/stringer', 'Stringer'));
+    if (hasFrontDeskDashboardAccess(role)) navItems.push(link('/frontdesk', 'Front Desk'));
   }
 
   return (
@@ -74,17 +75,30 @@ export function Header() {
               </Link>
             ))}
             {!session ? (
-              <Link
-                to="/login"
-                className={cn(
-                  'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                  location.pathname === '/login'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                )}
-              >
-                Login
-              </Link>
+              <>
+                <Link
+                  to="/signup"
+                  className={cn(
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                    location.pathname === '/signup'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  )}
+                >
+                  Sign up
+                </Link>
+                <Link
+                  to="/login"
+                  className={cn(
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                    location.pathname === '/login'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  )}
+                >
+                  Login
+                </Link>
+              </>
             ) : (
               <button
                 type="button"

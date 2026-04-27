@@ -12,6 +12,7 @@ import Admin from "./pages/Admin";
 import StringerDashboard from "./pages/StringerDashboard";
 import FrontDeskDashboard from "./pages/FrontDeskDashboard";
 import Login from "./pages/Login";
+import SignUp from "./pages/SignUp";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -43,6 +44,7 @@ function App() {
               <Routes>
               <Route path="/" element={<DropOff />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<SignUp />} />
               <Route
                 path="/admin"
                 element={
@@ -54,7 +56,7 @@ function App() {
               <Route
                 path="/frontdesk"
                 element={
-                  <ProtectedRoute allowedRoles={['admin', 'frontdesk']}>
+                  <ProtectedRoute allowedRoles={['admin', 'frontdesk', 'frontdesk_stringer']}>
                     <FrontDeskDashboard />
                   </ProtectedRoute>
                 }
@@ -62,7 +64,7 @@ function App() {
               <Route
                 path="/stringer"
                 element={
-                  <ProtectedRoute allowedRoles={['admin', 'stringer']}>
+                  <ProtectedRoute allowedRoles={['admin', 'stringer', 'frontdesk_stringer']}>
                     <StringerDashboard />
                   </ProtectedRoute>
                 }

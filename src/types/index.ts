@@ -4,6 +4,17 @@ export interface RacquetBrand {
   created_at?: string | null;
 }
 
+export type SignupAccessCodeKind = 'manager' | 'frontdesk' | 'stringer' | 'frontdesk_stringer';
+
+export interface SignupAccessCode {
+  id: string;
+  code: string;
+  code_kind: SignupAccessCodeKind;
+  uses_remaining: number;
+  created_at: string | null;
+  created_by: string | null;
+}
+
 export interface FrontDeskStaff {
   id: string;
   name: string;

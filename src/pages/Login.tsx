@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { Header } from '@/components/Header';
+import { homePathForRole } from '@/components/ProtectedRoute';
+import type { ProfileRole } from '@/contexts/AuthContext';
+import { isStaffRole } from '@/lib/staffRoles';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,11 +38,13 @@ export default function Login() {
           .select('role')
           .eq('id', userId)
           .maybeSingle();
-        const role = profile?.role;
-        if (role === 'admin') navigate('/admin', { replace: true });
-        else if (role === 'frontdesk') navigate('/frontdesk', { replace: true });
-        else if (role === 'stringer') navigate('/stringer', { replace: true });
-        else navigate(from === '/login' ? '/' : from, { replace: true });
+        const role = profile?.role as ProfileRole | undefined;
+        const home = role ? homePathForRole(role) : '/';
+        if (isStaffRole(role)) {
+          navigate(home, { replace: true });
+        } else {
+          navigate(from === '/login' ? '/' : from, { replace: true });
+        }
       } else {
         navigate('/', { replace: true });
       }
@@ -90,7 +95,13 @@ export default function Login() {
                 {loading ? 'Signing in…' : 'Sign in'}
               </Button>
             </form>
-            <p className="text-xs text-muted-foreground mt-4 text-center">
+            <p className="text-sm text-center mt-4">
+              <span className="text-muted-foreground">New staff? </span>
+              <Link to="/signup" className="text-primary font-medium hover:underline">
+                Create an account
+              </Link>
+            </p>
+            <p className="text-xs text-muted-foreground mt-3 text-center">
               <Link to="/" className="underline hover:text-foreground">
                 Back to drop-off
               </Link>

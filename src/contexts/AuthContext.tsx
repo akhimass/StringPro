@@ -2,7 +2,13 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
-export type ProfileRole = 'customer' | 'admin' | 'frontdesk' | 'stringer';
+export type ProfileRole =
+  | 'customer'
+  | 'admin'
+  | 'frontdesk'
+  | 'stringer'
+  /** Same person does front desk + stringing (both dashboards, not Manager). */
+  | 'frontdesk_stringer';
 
 export interface Profile {
   id: string;
@@ -88,12 +94,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      Object.keys(window.localStorage)
-        .filter((key) => key.startsWith('sb-'))
-        .forEach((key) => window.localStorage.removeItem(key));
-    }
-
     let mounted = true;
 
     if (import.meta.env.DEV) console.debug('[Auth] getSession started');
