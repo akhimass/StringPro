@@ -12,6 +12,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
+import {
+  EMAIL_MAX_LENGTH,
+  isValidEmail,
+  STAFF_PASSWORD_REQUIREMENTS_HINT,
+  staffSignupPasswordError,
+} from '@/lib/validation';
 
 export default function SignUp() {
   const [firstName, setFirstName] = useState('');
@@ -52,8 +58,18 @@ export default function SignUp() {
       toast.error('Email and password are required');
       return;
     }
-    if (password.length < 8) {
-      toast.error('Use a password of at least 8 characters');
+    const emailTrimmed = email.trim();
+    if (emailTrimmed.length > EMAIL_MAX_LENGTH) {
+      toast.error('Email is too long.');
+      return;
+    }
+    if (!isValidEmail(emailTrimmed)) {
+      toast.error('Enter a valid email address.');
+      return;
+    }
+    const pwErr = staffSignupPasswordError(password);
+    if (pwErr) {
+      toast.error(pwErr);
       return;
     }
     if (password !== password2) {
@@ -84,7 +100,7 @@ export default function SignUp() {
     setLoading(true);
     try {
       const { data, error } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
+        email: emailTrimmed.toLowerCase(),
         password,
         options: {
           data: {
@@ -178,7 +194,9 @@ export default function SignUp() {
                 <Input
                   id="su-email"
                   type="email"
+                  inputMode="email"
                   autoComplete="email"
+                  maxLength={EMAIL_MAX_LENGTH}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
@@ -196,6 +214,7 @@ export default function SignUp() {
                   disabled={loading}
                   required
                 />
+                <p className="text-xs text-muted-foreground">{STAFF_PASSWORD_REQUIREMENTS_HINT}</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="su-pass2">Confirm password</Label>

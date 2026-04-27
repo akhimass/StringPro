@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { EMAIL_MAX_LENGTH, isValidEmail } from '@/lib/validation';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -24,10 +25,19 @@ export default function Login() {
       toast.error('Email and password are required');
       return;
     }
+    const emailTrimmed = email.trim();
+    if (emailTrimmed.length > EMAIL_MAX_LENGTH) {
+      toast.error('Email is too long.');
+      return;
+    }
+    if (!isValidEmail(emailTrimmed)) {
+      toast.error('Enter a valid email address.');
+      return;
+    }
     setLoading(true);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
+        email: emailTrimmed.toLowerCase(),
         password,
       });
       if (error) throw error;
@@ -73,7 +83,9 @@ export default function Login() {
                 <Input
                   id="login-email"
                   type="email"
+                  inputMode="email"
                   autoComplete="email"
+                  maxLength={EMAIL_MAX_LENGTH}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@club.com"
