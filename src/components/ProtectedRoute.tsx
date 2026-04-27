@@ -25,7 +25,7 @@ export function homePathForRole(role: ProfileRole | null): string {
 }
 
 /**
- * If no session -> redirect to /login.
+ * If no session -> redirect to /login (Admin).
  * If session but role not allowed -> redirect to that user's home (not always `/`).
  */
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {

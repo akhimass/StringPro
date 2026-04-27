@@ -567,7 +567,7 @@ export const deleteRacquet = async (id: string): Promise<void> => {
   if (error) throw error;
 };
 
-// ---------- Staff sign-up & access codes (Manager generates; staff redeem on Sign up) ----------
+// ---------- Staff sign-up & access codes (Manager generates; staff redeem on Admin → Create an account) ----------
 
 function randomHexAccessCode(): string {
   const a = new Uint8Array(8);

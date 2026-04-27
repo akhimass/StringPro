@@ -1183,7 +1183,7 @@ export default function Admin() {
                 <div>
                   <h2 className="font-semibold">Staff access codes</h2>
                   <p className="text-sm text-muted-foreground">
-                    Invite codes for the Sign up page (manager, front desk, stringer, or both).
+                    Invite codes for new staff (Admin → Create an account): manager, front desk, stringer, or both.
                   </p>
                 </div>
               </div>

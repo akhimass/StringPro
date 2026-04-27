@@ -98,7 +98,7 @@ export default function SignUp() {
 
       if (!data.session) {
         toast.error(
-          'This project requires email confirmation before sign-in. After you confirm, sign in and use Manager → if your role is still "customer", contact a manager. Tip: in Supabase Auth settings you can turn off "Confirm email" for faster staff self-signup.'
+          'This project requires email confirmation before you can log in. After you confirm your email, open Admin and log in. If your role is still "customer", contact a manager. Tip: in Supabase Auth settings you can turn off "Confirm email" for faster staff self-signup.'
         );
         return;
       }
@@ -124,7 +124,7 @@ export default function SignUp() {
       }
       toast.success('Account created');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Sign up failed';
+      const message = err instanceof Error ? err.message : 'Create account failed';
       toast.error(message);
     } finally {
       setLoading(false);
@@ -138,12 +138,13 @@ export default function SignUp() {
         <div className="max-w-lg mx-auto mt-8 mb-12">
           <div className="card-elevated p-6 space-y-6">
             <div>
-              <h1 className="text-xl font-semibold">Create a staff account</h1>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">Admin</p>
+              <h1 className="text-xl font-semibold">Create an account</h1>
               <p className="text-sm text-muted-foreground mt-1">
-                Enter your name, email, password, and what you are signing up for. Redeem the access code your manager
-                shared for that role.{' '}
-                <strong>Manager</strong> includes all dashboards; use a manager code. For both front desk and stringing
-                (without manager), one <strong>front desk + stringer</strong> code.
+                For new staff only. Enter your name, email, password, and role, then the access code your manager shared.
+                After you are set up, use <span className="text-foreground font-medium">Admin</span> on this site to log
+                in anytime. <strong>Manager</strong> includes all dashboards. For both front desk and stringing without
+                manager, use one <strong>front desk + stringer</strong> code.
               </p>
             </div>
 
@@ -316,8 +317,8 @@ export default function SignUp() {
 
             <p className="text-sm text-center text-muted-foreground">
               Already have an account?{' '}
-              <Link to="/login" className="text-primary underline">
-                Sign in
+              <Link to="/login" className="text-primary font-medium hover:underline">
+                Log in
               </Link>
             </p>
             <p className="text-xs text-muted-foreground text-center">

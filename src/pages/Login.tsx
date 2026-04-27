@@ -48,9 +48,9 @@ export default function Login() {
       } else {
         navigate('/', { replace: true });
       }
-      toast.success('Signed in');
+      toast.success('Logged in');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Sign in failed';
+      const message = err instanceof Error ? err.message : 'Log in failed';
       toast.error(message);
     } finally {
       setLoading(false);
@@ -63,9 +63,9 @@ export default function Login() {
       <main className="content-container">
         <div className="max-w-sm mx-auto mt-12">
           <div className="card-elevated p-6">
-            <h1 className="text-xl font-semibold mb-2">Staff sign in</h1>
+            <h1 className="text-xl font-semibold mb-1">Admin</h1>
             <p className="text-sm text-muted-foreground mb-6">
-              Use your club account to access dashboards.
+              Log in with your club email and password to open your dashboards.
             </p>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -92,11 +92,11 @@ export default function Login() {
                 />
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Signing in…' : 'Sign in'}
+                {loading ? 'Logging in…' : 'Log in'}
               </Button>
             </form>
             <p className="text-sm text-center mt-4">
-              <span className="text-muted-foreground">New staff? </span>
+              <span className="text-muted-foreground">New user? </span>
               <Link to="/signup" className="text-primary font-medium hover:underline">
                 Create an account
               </Link>

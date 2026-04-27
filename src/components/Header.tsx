@@ -75,30 +75,17 @@ export function Header() {
               </Link>
             ))}
             {!session ? (
-              <>
-                <Link
-                  to="/signup"
-                  className={cn(
-                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                    location.pathname === '/signup'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  )}
-                >
-                  Sign up
-                </Link>
-                <Link
-                  to="/login"
-                  className={cn(
-                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                    location.pathname === '/login'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  )}
-                >
-                  Login
-                </Link>
-              </>
+              <Link
+                to="/login"
+                className={cn(
+                  'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                  location.pathname === '/login' || location.pathname === '/signup'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                )}
+              >
+                Admin
+              </Link>
             ) : (
               <button
                 type="button"

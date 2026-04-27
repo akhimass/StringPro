@@ -80,7 +80,7 @@ export function AccessCodesPanel() {
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Generate single-use (or multi-use) codes. Share the code with the new staff member for them to enter on the{' '}
-        <span className="text-foreground font-medium">Sign up</span> page. Manager codes grant full access; a combined
+        <span className="text-foreground font-medium">Admin → Create an account</span> flow. Manager codes grant full access; a combined
         code is for people who are both on front desk and stringing.
       </p>
       <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
