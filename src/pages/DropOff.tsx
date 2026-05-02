@@ -5,7 +5,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMemo, useEffect } from 'react';
 import { normalizeUSPhone, isValidEmail } from '@/lib/validation';
-import { fetchStrings, fetchBrands, fetchFrontDeskStaff, fetchStringers, createRacquet, uploadMultipleJobPhotos } from '@/lib/api';
+import {
+  fetchStrings,
+  fetchBrands,
+  fetchFrontDeskStaff,
+  fetchStringers,
+  fetchIntakeAddonPricing,
+  createRacquet,
+  uploadMultipleJobPhotos,
+} from '@/lib/api';
 import { supabaseConfigError } from '@/lib/supabase';
 import { RacquetFormData, IntakeAddOns } from '@/types';
 import { Header } from '@/components/Header';
@@ -191,6 +199,15 @@ export default function DropOff() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     refetchOnMount: 'always',
+  });
+
+  const { data: intakeAddonPricing } = useQuery({
+    queryKey: ['intake_addon_pricing'],
+    queryFn: fetchIntakeAddonPricing,
+    retry: 2,
+    staleTime: 60_000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const {
@@ -381,7 +398,12 @@ export default function DropOff() {
             ticketNumber={submittedTicket}
             amountDue={
               submittedAmountDue ??
-              computeAmountDue({ addOns, stringExtra: selectedStringExtra, stringers })
+              computeAmountDue({
+                addOns,
+                stringExtra: selectedStringExtra,
+                stringers,
+                addonPricing: intakeAddonPricing ?? undefined,
+              })
             }
             onNewSubmission={handleNewSubmission}
           />
@@ -417,10 +439,10 @@ export default function DropOff() {
                     There are currently no strings available for selection. Please contact an administrator.
                   </p>
                   <Link
-                    to="/admin?tab=staffing"
+                    to="/admin?tab=inventory"
                     className="text-sm text-primary hover:underline font-medium"
                   >
-                    Admin → Settings → Strings
+                    Admin → Inventory → Strings
                   </Link>
                 </div>
               </div>
@@ -697,6 +719,7 @@ export default function DropOff() {
                 onChange={setAddOns}
                 stringers={Array.isArray(stringers) ? stringers : []}
                 stringersLoading={stringersLoading}
+                addonPricing={intakeAddonPricing}
               />
 
               {/* Price Summary */}
@@ -706,6 +729,7 @@ export default function DropOff() {
                 stringExtra={selectedStringExtra}
                 stringerName={addOns.stringerId && Array.isArray(stringers) ? (stringers.find((s) => s.id === addOns.stringerId)?.name ?? null) : null}
                 stringers={stringers}
+                addonPricing={intakeAddonPricing}
               />
 
               {/* Waiver & Terms – Drop-Off Confirmation */}

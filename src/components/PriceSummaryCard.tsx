@@ -1,4 +1,4 @@
-import { IntakeAddOns, Stringer } from '@/types';
+import { IntakeAddOns, IntakeAddonPricing, Stringer } from '@/types';
 import { BASE_LABOR_FEE, computePricing } from '@/lib/pricing';
 
 interface PriceSummaryCardProps {
@@ -10,14 +10,24 @@ interface PriceSummaryCardProps {
   stringerName?: string | null;
   /** Stringers list for pricing (lookup stringer extra cost). */
   stringers?: Stringer[] | null;
+  addonPricing?: IntakeAddonPricing | null;
 }
 
 function formatPrice(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
-export function PriceSummaryCard({ stringName, addOns, stringExtra, stringerName, stringers }: PriceSummaryCardProps) {
-  const breakdown = computePricing({ stringExtra, addOns, stringers });
+export function PriceSummaryCard({
+  stringName,
+  addOns,
+  stringExtra,
+  stringerName,
+  stringers,
+  addonPricing,
+}: PriceSummaryCardProps) {
+  const breakdown = computePricing({ stringExtra, addOns, stringers, addonPricing });
+  const stringerLineLabel =
+    stringerName || (addOns?.stringerId ? 'Specialist stringer' : 'Default stringer');
 
   return (
     <div className="card-elevated p-6 space-y-4">
@@ -54,7 +64,7 @@ export function PriceSummaryCard({ stringName, addOns, stringExtra, stringerName
         )}
         {breakdown.stringerFee > 0 && (
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">{stringerName || 'Stringer'}</span>
+            <span className="text-muted-foreground">{stringerLineLabel}</span>
             <span className="font-medium">+{formatPrice(breakdown.stringerFee)}</span>
           </div>
         )}

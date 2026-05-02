@@ -45,6 +45,7 @@ import { AttachmentsDialog } from '@/components/admin/AttachmentsDialog';
 import { TensionDialog } from '@/components/admin/TensionDialog';
 import { ManagerAnalytics } from '@/components/admin/ManagerAnalytics';
 import { AccessCodesPanel } from '@/components/admin/AccessCodesPanel';
+import { IntakeAddonPricingPanel } from '@/components/admin/IntakeAddonPricingPanel';
 import { sendSmsReminder, isDay8ReminderEligible, isDay10ReminderEligible } from '@/lib/messaging';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -1347,6 +1348,21 @@ export default function Admin() {
           </TabsContent>
 
           <TabsContent value="inventory" className="animate-fade-in space-y-6">
+            <div className="card-elevated">
+              <div className="p-4 border-b flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-primary" />
+                <div>
+                  <h2 className="font-semibold">Additional service pricing</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Rush, grommet repair, grip replacement, and default-stringer fees on the drop-off form.
+                  </p>
+                </div>
+              </div>
+              <div className="p-4">
+                <IntakeAddonPricingPanel />
+              </div>
+            </div>
+
             <div className="card-elevated">
               <div className="p-4 border-b flex items-center justify-between">
                 <div>

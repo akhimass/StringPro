@@ -205,6 +205,18 @@ export interface RacquetJobFormData {
   notes?: string;
 }
 
+/** Singleton row (id=1) — fees for drop-off additional services (Manager → Inventory). */
+export interface IntakeAddonPricing {
+  id: number;
+  rush_1_day_fee: number;
+  rush_2_hour_fee: number;
+  grommet_repair_fee: number;
+  grip_replacement_fee: number;
+  /** When no specialist stringer is selected (“default stringer”). */
+  default_stringer_fee: number;
+  updated_at?: string | null;
+}
+
 // Add-on selections for intake form
 export interface IntakeAddOns {
   rushService: 'none' | '1-day' | '2-hour';

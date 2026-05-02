@@ -1,4 +1,5 @@
-import { IntakeAddOns as AddOns, Stringer } from '@/types';
+import { IntakeAddOns as AddOns, IntakeAddonPricing, Stringer } from '@/types';
+import { DEFAULT_INTAKE_ADDON_PRICING } from '@/lib/pricing';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import {
@@ -15,12 +16,28 @@ interface IntakeAddOnsProps {
   /** Stringers from API (for dropdown); default stringer = no selection */
   stringers: Stringer[];
   stringersLoading?: boolean;
+  /** Manager-configured fees; defaults used while loading or if omitted. */
+  addonPricing?: IntakeAddonPricing | null;
 }
 
-export function IntakeAddOnsSection({ addOns, onChange, stringers = [], stringersLoading }: IntakeAddOnsProps) {
+function fmtUsd(n: number): string {
+  const x = Number.isFinite(n) ? n : 0;
+  return `$${x.toFixed(2)}`;
+}
+
+export function IntakeAddOnsSection({
+  addOns,
+  onChange,
+  stringers = [],
+  stringersLoading,
+  addonPricing,
+}: IntakeAddOnsProps) {
   const update = (partial: Partial<AddOns>) => onChange({ ...addOns, ...partial });
   const stringerValue = addOns.stringerId ?? 'default';
   const list = Array.isArray(stringers) ? stringers : [];
+  const fees = addonPricing ?? DEFAULT_INTAKE_ADDON_PRICING;
+  const defStr = Math.max(0, fees.default_stringer_fee);
+  const defStrLabel = defStr > 0 ? `+${fmtUsd(defStr)}` : 'Included';
 
   return (
     <div className="card-elevated p-6 space-y-4">
@@ -43,11 +60,11 @@ export function IntakeAddOnsSection({ addOns, onChange, stringers = [], stringer
               <SelectItem value="none">None</SelectItem>
               <SelectItem value="1-day">
                 <span>1-Day Rush</span>{' '}
-                <span className="text-primary font-medium">+$10</span>
+                <span className="text-primary font-medium">+{fmtUsd(fees.rush_1_day_fee)}</span>
               </SelectItem>
               <SelectItem value="2-hour">
                 <span>2-Hour Rush</span>{' '}
-                <span className="text-primary font-medium">+$20</span>
+                <span className="text-primary font-medium">+{fmtUsd(fees.rush_2_hour_fee)}</span>
               </SelectItem>
             </SelectContent>
           </Select>
@@ -65,7 +82,10 @@ export function IntakeAddOnsSection({ addOns, onChange, stringers = [], stringer
               <SelectValue placeholder={stringersLoading ? 'Loading…' : 'Select stringer'} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="default">Default Stringer</SelectItem>
+              <SelectItem value="default">
+                <span>Default Stringer</span>{' '}
+                <span className="text-primary font-medium">{defStrLabel}</span>
+              </SelectItem>
               {list.map((s) => {
                 const cost = s.extra_cost != null && Number(s.extra_cost) > 0 ? Number(s.extra_cost) : 0;
                 const costLabel = cost > 0 ? `+$${cost.toFixed(2)}` : 'Included';
@@ -94,7 +114,7 @@ export function IntakeAddOnsSection({ addOns, onChange, stringers = [], stringer
               <SelectItem value="no">No</SelectItem>
               <SelectItem value="yes">
                 <span>Yes</span>{' '}
-                <span className="text-primary font-medium">+$5</span>
+                <span className="text-primary font-medium">+{fmtUsd(fees.grommet_repair_fee)}</span>
               </SelectItem>
             </SelectContent>
           </Select>
@@ -114,7 +134,7 @@ export function IntakeAddOnsSection({ addOns, onChange, stringers = [], stringer
               <SelectItem value="no">No</SelectItem>
               <SelectItem value="yes">
                 <span>Yes</span>{' '}
-                <span className="text-primary font-medium">+$5</span>
+                <span className="text-primary font-medium">+{fmtUsd(fees.grip_replacement_fee)}</span>
               </SelectItem>
             </SelectContent>
           </Select>

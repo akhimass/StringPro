@@ -11,9 +11,10 @@ import {
   SignupAccessCode,
   SignupAccessCodeKind,
   StaffDirectoryProfile,
+  IntakeAddonPricing,
 } from '@/types';
 import { normalizeUSPhone } from '@/lib/validation';
-import { computeAmountDue } from '@/lib/pricing';
+import { computeAmountDue, DEFAULT_INTAKE_ADDON_PRICING } from '@/lib/pricing';
 
 // Racquet brands API
 export const fetchBrands = async (): Promise<RacquetBrand[]> => {
@@ -49,6 +50,54 @@ export const updateBrand = async (id: string, name: string): Promise<RacquetBran
 export const deleteBrand = async (id: string): Promise<void> => {
   const { error } = await supabase.from('racquet_brands').delete().eq('id', id);
   if (error) throw error;
+};
+
+function mapIntakeAddonPricingRow(row: Record<string, unknown>): IntakeAddonPricing {
+  return {
+    id: Number(row.id) || 1,
+    rush_1_day_fee: Math.max(0, Number(row.rush_1_day_fee ?? DEFAULT_INTAKE_ADDON_PRICING.rush_1_day_fee)),
+    rush_2_hour_fee: Math.max(0, Number(row.rush_2_hour_fee ?? DEFAULT_INTAKE_ADDON_PRICING.rush_2_hour_fee)),
+    grommet_repair_fee: Math.max(0, Number(row.grommet_repair_fee ?? DEFAULT_INTAKE_ADDON_PRICING.grommet_repair_fee)),
+    grip_replacement_fee: Math.max(0, Number(row.grip_replacement_fee ?? DEFAULT_INTAKE_ADDON_PRICING.grip_replacement_fee)),
+    default_stringer_fee: Math.max(0, Number(row.default_stringer_fee ?? DEFAULT_INTAKE_ADDON_PRICING.default_stringer_fee)),
+    updated_at: (row.updated_at as string) ?? null,
+  };
+}
+
+/** Public + staff: singleton intake add-on fees for drop-off pricing. */
+export const fetchIntakeAddonPricing = async (): Promise<IntakeAddonPricing> => {
+  const { data, error } = await supabase
+    .from('intake_addon_pricing' as any)
+    .select('*')
+    .eq('id', 1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return { ...DEFAULT_INTAKE_ADDON_PRICING };
+  return mapIntakeAddonPricingRow(data as Record<string, unknown>);
+};
+
+/** Manager only (RLS): update intake add-on fee row. */
+export const updateIntakeAddonPricing = async (
+  row: Pick<
+    IntakeAddonPricing,
+    'rush_1_day_fee' | 'rush_2_hour_fee' | 'grommet_repair_fee' | 'grip_replacement_fee' | 'default_stringer_fee'
+  >
+): Promise<IntakeAddonPricing> => {
+  const { data, error } = await (supabase
+    .from('intake_addon_pricing' as any)
+    .update({
+      rush_1_day_fee: row.rush_1_day_fee,
+      rush_2_hour_fee: row.rush_2_hour_fee,
+      grommet_repair_fee: row.grommet_repair_fee,
+      grip_replacement_fee: row.grip_replacement_fee,
+      default_stringer_fee: row.default_stringer_fee,
+      updated_at: new Date().toISOString(),
+    } as any)
+    .eq('id', 1)
+    .select()
+    .single() as any);
+  if (error) throw error;
+  return mapIntakeAddonPricingRow(data as Record<string, unknown>);
 };
 
 // Front desk picklist: real staff from profiles (front desk + combined role). Same shape as legacy for forms.
@@ -274,7 +323,8 @@ export const createRacquet = async (formData: RacquetFormData): Promise<RacquetJ
 
   const addOns = formData.addOns;
   const stringers = (formData as any).stringers;
-  const amountDue = computeAmountDue({ addOns, stringExtra, stringers });
+  const addonPricing = await fetchIntakeAddonPricing();
+  const amountDue = computeAmountDue({ addOns, stringExtra, stringers, addonPricing });
 
   const stringerId = addOns?.stringerId ?? null;
   const serviceType = stringerId != null ? 'specialist' : 'default';
