@@ -18,7 +18,12 @@ import {
   STAFF_PASSWORD_REQUIREMENTS_HINT,
   staffSignupPasswordError,
 } from '@/lib/validation';
-import { formatAuthSignUpError } from '@/lib/authSignUpErrors';
+import {
+  formatAuthSignUpError,
+  formatCaughtErrorMessage,
+  isDuplicateOrExistingEmailSignUpError,
+  isEmailConfirmationPendingAfterSignUp,
+} from '@/lib/authSignUpErrors';
 
 export default function SignUp() {
   const [firstName, setFirstName] = useState('');
@@ -120,8 +125,9 @@ export default function SignUp() {
         return;
       }
 
-      const { data, error } = await supabase.auth.signUp({
-        email: emailTrimmed.toLowerCase(),
+      const emailLower = emailTrimmed.toLowerCase();
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: emailLower,
         password,
         options: {
           data: {
@@ -131,13 +137,38 @@ export default function SignUp() {
           },
         },
       });
-      if (error) {
-        throw new Error(formatAuthSignUpError(error));
+
+      let session = signUpData?.session ?? null;
+
+      if (signUpError) {
+        if (isDuplicateOrExistingEmailSignUpError(signUpError)) {
+          const { data: inData, error: inErr } = await supabase.auth.signInWithPassword({
+            email: emailLower,
+            password,
+          });
+          if (inErr) throw new Error(formatAuthSignUpError(inErr));
+          session = inData.session;
+        } else {
+          throw new Error(formatAuthSignUpError(signUpError));
+        }
+      } else if (!session) {
+        if (isEmailConfirmationPendingAfterSignUp(signUpData?.user ?? null)) {
+          toast.error(
+            'This project requires email confirmation before you can log in. After you confirm your email, open Admin and log in. If your role is still "customer", contact a manager. Tip: in Supabase Auth settings you can turn off "Confirm email" for faster staff self-signup.'
+          );
+          return;
+        }
+        const { data: inData, error: inErr } = await supabase.auth.signInWithPassword({
+          email: emailLower,
+          password,
+        });
+        if (inErr) throw new Error(formatAuthSignUpError(inErr));
+        session = inData.session;
       }
 
-      if (!data.session) {
+      if (!session) {
         toast.error(
-          'This project requires email confirmation before you can log in. After you confirm your email, open Admin and log in. If your role is still "customer", contact a manager. Tip: in Supabase Auth settings you can turn off "Confirm email" for faster staff self-signup.'
+          'Could not start your session. If you already tried to create this account, use Admin → Log in with this email and password, or reset your password.'
         );
         return;
       }
@@ -163,8 +194,7 @@ export default function SignUp() {
       navigate(homePathForRole(r), { replace: true });
       toast.success('Account created');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Create account failed';
-      toast.error(message);
+      toast.error(formatCaughtErrorMessage(err));
     } finally {
       setLoading(false);
     }
