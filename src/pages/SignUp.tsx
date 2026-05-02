@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { completeSignupWithCodes } from '@/lib/api';
+import { completeSignupWithCodes, validateStaffSignupInviteCodes } from '@/lib/api';
 import { Header } from '@/components/Header';
 import { homePathForRole } from '@/components/ProtectedRoute';
 import type { ProfileRole } from '@/contexts/AuthContext';
@@ -18,6 +18,7 @@ import {
   STAFF_PASSWORD_REQUIREMENTS_HINT,
   staffSignupPasswordError,
 } from '@/lib/validation';
+import { formatAuthSignUpError } from '@/lib/authSignUpErrors';
 
 export default function SignUp() {
   const [firstName, setFirstName] = useState('');
@@ -34,7 +35,7 @@ export default function SignUp() {
   const [codeFrontdeskStringer, setCodeFrontdeskStringer] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { refreshProfile } = useAuth();
+  const { refreshProfile, signOut } = useAuth();
 
   const setAsManager = (v: boolean) => {
     setWantManager(v);
@@ -99,6 +100,26 @@ export default function SignUp() {
 
     setLoading(true);
     try {
+      const invitePayload = {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        wantManager,
+        wantFrontDesk: wantManager ? false : wantFrontDesk,
+        wantStringer: wantManager ? false : wantStringer,
+        codeManager: wantManager ? codeManager : '',
+        codeFrontDesk: !wantManager && needFrontDeskOnly ? codeFrontDesk : '',
+        codeStringer: !wantManager && needStringerOnly ? codeStringer : '',
+        codeFrontdeskStringer: !wantManager && needCombinedOnly ? codeFrontdeskStringer : '',
+      };
+
+      const inviteOk = await validateStaffSignupInviteCodes(invitePayload);
+      if (!inviteOk) {
+        toast.error(
+          'That access code is not valid for the account type you selected (or it has no uses left). Check the code with your manager and try again—you have not been signed up yet.'
+        );
+        return;
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email: emailTrimmed.toLowerCase(),
         password,
@@ -110,7 +131,9 @@ export default function SignUp() {
           },
         },
       });
-      if (error) throw error;
+      if (error) {
+        throw new Error(formatAuthSignUpError(error));
+      }
 
       if (!data.session) {
         toast.error(
@@ -119,25 +142,25 @@ export default function SignUp() {
         return;
       }
 
-      const role = await completeSignupWithCodes({
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        wantManager,
-        wantFrontDesk: wantManager ? false : wantFrontDesk,
-        wantStringer: wantManager ? false : wantStringer,
-        codeManager: wantManager ? codeManager : '',
-        codeFrontDesk: !wantManager && needFrontDeskOnly ? codeFrontDesk : '',
-        codeStringer: !wantManager && needStringerOnly ? codeStringer : '',
-        codeFrontdeskStringer: !wantManager && needCombinedOnly ? codeFrontdeskStringer : '',
-      });
+      let role: string;
+      try {
+        role = await completeSignupWithCodes(invitePayload);
+      } catch (codeErr) {
+        // signUp already created an auth user + session (usually role still customer). Roll back so they are not stuck on the public site as "logged in".
+        await signOut();
+        throw codeErr;
+      }
 
       await refreshProfile();
       const r = role as ProfileRole;
-      if (isStaffRole(r)) {
-        navigate(homePathForRole(r), { replace: true });
-      } else {
-        navigate('/', { replace: true });
+      if (!isStaffRole(r)) {
+        await signOut();
+        toast.error(
+          'Your account was created but a staff role was not assigned. Check your access code and try again, or ask a manager for a new code.'
+        );
+        return;
       }
+      navigate(homePathForRole(r), { replace: true });
       toast.success('Account created');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Create account failed';

@@ -670,6 +670,21 @@ export type CompleteSignupInput = {
   codeFrontdeskStringer: string;
 };
 
+/** Call while still anonymous: true if invite code is valid for this role path (does not consume a use). */
+export const validateStaffSignupInviteCodes = async (input: CompleteSignupInput): Promise<boolean> => {
+  const { data, error } = await (supabase.rpc('validate_staff_signup_invite_codes' as any, {
+    p_want_manager: input.wantManager,
+    p_want_front_desk: input.wantFrontDesk,
+    p_want_stringer: input.wantStringer,
+    p_code_manager: input.codeManager.trim() || null,
+    p_code_front_desk: input.codeFrontDesk.trim() || null,
+    p_code_stringer: input.codeStringer.trim() || null,
+    p_code_frontdesk_stringer: input.codeFrontdeskStringer.trim() || null,
+  }) as any);
+  if (error) throw error;
+  return Boolean(data);
+};
+
 /**
  * After supabase.auth.signUp returns a session, call this to assign `profiles.role` from validated codes.
  */
@@ -686,18 +701,26 @@ export const completeSignupWithCodes = async (input: CompleteSignupInput): Promi
     p_code_frontdesk_stringer: input.codeFrontdeskStringer.trim() || null,
   }) as any);
   if (error) {
-    const msg = error.message || '';
-    if (msg.includes('invalid_manager_code')) throw new Error('Invalid manager access code');
-    if (msg.includes('invalid_combined_code')) throw new Error('Invalid front desk + stringer access code');
-    if (msg.includes('invalid_front_desk_code')) throw new Error('Invalid front desk access code');
-    if (msg.includes('invalid_stringer_code')) throw new Error('Invalid stringer access code');
-    if (msg.includes('name_required')) throw new Error('First and last name are required');
-    if (msg.includes('no_role_selected')) throw new Error('Select at least one account type');
-    if (msg.includes('not_authenticated')) throw new Error('Not signed in. Try again or sign in to finish setup.');
-    if (msg.includes('profile_not_found')) throw new Error('Profile not found. Contact support.');
-    throw error;
+    const e = error as { message?: string; details?: string; hint?: string };
+    const msg = [e.message, e.details, e.hint].filter(Boolean).join(' ');
+    if (/invalid_manager_code/i.test(msg)) throw new Error('Invalid manager access code.');
+    if (/invalid_combined_code/i.test(msg)) throw new Error('Invalid front desk + stringer access code.');
+    if (/invalid_front_desk_code/i.test(msg)) throw new Error('Invalid front desk access code.');
+    if (/invalid_stringer_code/i.test(msg)) throw new Error('Invalid stringer access code.');
+    if (/name_required/i.test(msg)) throw new Error('First and last name are required.');
+    if (/no_role_selected/i.test(msg)) throw new Error('Select at least one account type.');
+    if (/not_authenticated/i.test(msg)) throw new Error('Not signed in. Try again or sign in to finish setup.');
+    if (/profile_not_found/i.test(msg)) throw new Error('Profile not found. Contact support.');
+    throw new Error(
+      'Could not apply your access code. Check the code with your manager and try again. If this keeps happening, contact support.'
+    );
   }
-  return data as string;
+  const role = data as string;
+  const allowed = new Set(['admin', 'frontdesk', 'stringer', 'frontdesk_stringer']);
+  if (!role || !allowed.has(role)) {
+    throw new Error('Staff role was not assigned. Check your access code and try again.');
+  }
+  return role;
 };
 
 // Photo upload helpers (public bucket racquet-photos; paths jobs/<job_id>/intake|completed|issue/<uuid>.<ext>)
