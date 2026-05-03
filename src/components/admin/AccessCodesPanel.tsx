@@ -21,7 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { EmptyState } from '@/components/EmptyState';
-import { KeyRound, Plus, Trash2, Copy } from 'lucide-react';
+import { KeyRound, Plus, RefreshCw, Trash2, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 
@@ -37,9 +37,13 @@ export function AccessCodesPanel() {
   const [maxUses, setMaxUses] = useState('1');
   const queryClient = useQueryClient();
 
-  const { data: codes = [], isLoading, error } = useQuery({
+  const { data: codes = [], isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['signup_access_codes'],
     queryFn: fetchSignupAccessCodes,
+    // Global default staleTime is 5m; uses_remaining changes when staff sign up elsewhere — keep this fresh.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: 15_000,
   });
 
   const createMut = useMutation({
@@ -108,6 +112,17 @@ export function AccessCodesPanel() {
             onChange={(e) => setMaxUses(e.target.value)}
           />
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void refetch()}
+          disabled={isFetching}
+          className="gap-2 shrink-0"
+          title="Reload uses remaining from the server"
+        >
+          <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+          Refresh list
+        </Button>
         <Button
           type="button"
           onClick={() => createMut.mutate()}
