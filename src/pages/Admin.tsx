@@ -46,7 +46,12 @@ import { TensionDialog } from '@/components/admin/TensionDialog';
 import { ManagerAnalytics } from '@/components/admin/ManagerAnalytics';
 import { AccessCodesPanel } from '@/components/admin/AccessCodesPanel';
 import { IntakeAddonPricingPanel } from '@/components/admin/IntakeAddonPricingPanel';
-import { sendSmsReminder, isDay8ReminderEligible, isDay10ReminderEligible } from '@/lib/messaging';
+import {
+  sendSmsReminder,
+  sendCustomerSms,
+  isDay8ReminderEligible,
+  isDay10ReminderEligible,
+} from '@/lib/messaging';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -97,6 +102,7 @@ import {
   DollarSign,
   Paperclip,
   MessageSquare,
+  MessageSquareReply,
   Sliders,
   BarChart3,
   KeyRound,
@@ -190,7 +196,7 @@ export default function Admin() {
   // Send reminder dialog state (Day 8 / Day 10)
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
   const [reminderJob, setReminderJob] = useState<RacquetJob | null>(null);
-  const [reminderType, setReminderType] = useState<'day8' | 'day10'>('day8');
+  const [reminderType, setReminderType] = useState<'day8' | 'day10' | 'pickup_ready'>('day8');
   const [reminderSending, setReminderSending] = useState(false);
 
   // Tension dialog state
@@ -426,14 +432,19 @@ export default function Admin() {
     if (!reminderJob) return;
     setReminderSending(true);
     try {
-      const templateKey = reminderType === 'day8' ? 'day8_reminder' : 'day10_notice';
-      await sendSmsReminder(reminderJob.id, templateKey);
+      if (reminderType === 'pickup_ready') {
+        await sendCustomerSms(reminderJob.id, 'pickup_ready');
+        toast.success('Pickup-ready SMS sent');
+      } else {
+        const templateKey = reminderType === 'day8' ? 'day8_reminder' : 'day10_notice';
+        await sendSmsReminder(reminderJob.id, templateKey);
+        toast.success(reminderType === 'day8' ? 'Day 8 reminder sent (SMS)' : 'Day 10 notice sent (SMS)');
+      }
       queryClient.invalidateQueries({ queryKey: ['racquets'] });
-      toast.success(reminderType === 'day8' ? 'Day 8 reminder sent (SMS)' : 'Day 10 notice sent (SMS)');
       setReminderDialogOpen(false);
       setReminderJob(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to send reminder');
+      toast.error(err instanceof Error ? err.message : 'Failed to send SMS');
     } finally {
       setReminderSending(false);
     }
@@ -1018,7 +1029,21 @@ export default function Admin() {
                                   )}
                                 </Button>
 
-                                {/* Send Day 8 / Day 10 reminders */}
+                                {normalized === 'ready_for_pickup' && racquet.phone && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    title="Resend pickup-ready SMS"
+                                    onClick={() => {
+                                      setReminderJob(racquet);
+                                      setReminderType('pickup_ready');
+                                      setReminderDialogOpen(true);
+                                    }}
+                                    className="opacity-60 group-hover:opacity-100 text-primary"
+                                  >
+                                    <MessageSquareReply className="w-4 h-4" />
+                                  </Button>
+                                )}
                                 {day8Eligible && (
                                   <Button
                                     variant="ghost"
@@ -1846,18 +1871,25 @@ export default function Admin() {
           }}
         />
 
-        {/* Send reminder confirm (Day 8 / Day 10) */}
         <AlertDialog open={reminderDialogOpen} onOpenChange={setReminderDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                {reminderType === 'day8' ? 'Send Day 8 Reminder' : 'Send Day 10 Notice'}
+                {reminderType === 'pickup_ready'
+                  ? 'Resend Pickup-Ready SMS'
+                  : reminderType === 'day8'
+                  ? 'Send Day 8 Reminder'
+                  : 'Send Day 10 Notice'}
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {reminderJob && (
                   <>
-                    Send {reminderType === 'day8' ? 'Day 8 reminder' : 'Day 10 overdue notice'} (SMS) to{' '}
-                    <strong>{reminderJob.member_name}</strong>?
+                    {reminderType === 'pickup_ready'
+                      ? 'Resend pickup-ready SMS'
+                      : reminderType === 'day8'
+                      ? 'Send Day 8 reminder (SMS)'
+                      : 'Send Day 10 overdue notice (SMS)'}{' '}
+                    to <strong>{reminderJob.member_name}</strong>?
                     {reminderJob.phone ? (
                       <span className="block mt-1 text-muted-foreground text-sm">To: {reminderJob.phone}</span>
                     ) : null}

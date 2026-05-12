@@ -1,14 +1,24 @@
 const E164_REGEX = /^\+[1-9]\d{1,14}$/;
 
-function getVerifySecrets(): { accountSid: string; authToken: string; verifyServiceSid: string } {
+function getVerifySecrets(): { accountSid: string; username: string; password: string; verifyServiceSid: string } {
   const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID')?.trim();
-  const authToken = Deno.env.get('TWILIO_AUTH_TOKEN')?.trim();
   const verifyServiceSid = Deno.env.get('TWILIO_VERIFY_SERVICE_SID')?.trim();
-  if (!accountSid || !authToken || !verifyServiceSid) throw new Error('Missing secrets: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_VERIFY_SERVICE_SID');
-  return { accountSid, authToken, verifyServiceSid };
+  if (!accountSid) throw new Error('Missing secret: TWILIO_ACCOUNT_SID');
+  if (!verifyServiceSid) throw new Error('Missing secret: TWILIO_VERIFY_SERVICE_SID');
+
+  const apiKeySid = Deno.env.get('TWILIO_API_KEY_SID')?.trim();
+  const apiKeySecret = Deno.env.get('TWILIO_API_KEY_SECRET')?.trim();
+  const authToken = Deno.env.get('TWILIO_AUTH_TOKEN')?.trim();
+
+  if (apiKeySid && apiKeySecret) {
+    return { accountSid, username: apiKeySid, password: apiKeySecret, verifyServiceSid };
+  }
+  if (authToken) {
+    return { accountSid, username: accountSid, password: authToken, verifyServiceSid };
+  }
+  throw new Error('Missing Twilio credentials. Set TWILIO_API_KEY_SID + TWILIO_API_KEY_SECRET (preferred), or TWILIO_AUTH_TOKEN.');
 }
 
-// Naive in-memory rate limit: phone -> timestamps (last N requests)
 const rateLimit = new Map<string, number[]>();
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 5;
@@ -62,14 +72,14 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { accountSid, authToken, verifyServiceSid } = getVerifySecrets();
+    const { username, password, verifyServiceSid } = getVerifySecrets();
 
     const url = `https://verify.twilio.com/v2/Services/${verifyServiceSid}/Verifications`;
     const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: 'Basic ' + btoa(`${accountSid}:${authToken}`),
+        Authorization: 'Basic ' + btoa(`${username}:${password}`),
       },
       body: new URLSearchParams({ To: phone, Channel: channel }),
     });

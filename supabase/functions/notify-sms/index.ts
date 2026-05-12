@@ -1,14 +1,44 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const VALID_TEMPLATE_KEYS = ['day8_reminder', 'day10_notice'];
+const VALID_TEMPLATE_KEYS = ['day8_reminder', 'day10_notice', 'pickup_ready', 'payment_receipt'];
 
-function getSmsSecrets(): { accountSid: string; authToken: string; fromNumber: string } {
+interface TwilioAuth {
+  accountSid: string;
+  username: string;
+  password: string;
+  messagingServiceSid: string | null;
+  fromNumber: string | null;
+}
+
+function getTwilioAuth(): TwilioAuth {
   const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID')?.trim();
+  if (!accountSid) throw new Error('Missing secret: TWILIO_ACCOUNT_SID');
+
+  const apiKeySid = Deno.env.get('TWILIO_API_KEY_SID')?.trim();
+  const apiKeySecret = Deno.env.get('TWILIO_API_KEY_SECRET')?.trim();
   const authToken = Deno.env.get('TWILIO_AUTH_TOKEN')?.trim();
-  const fromNumber = Deno.env.get('TWILIO_FROM_NUMBER')?.trim();
-  if (!accountSid || !authToken) throw new Error('Missing secrets: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN');
-  if (!fromNumber) throw new Error('Missing secret: TWILIO_FROM_NUMBER');
-  return { accountSid, authToken, fromNumber };
+
+  let username: string;
+  let password: string;
+  if (apiKeySid && apiKeySecret) {
+    username = apiKeySid;
+    password = apiKeySecret;
+  } else if (authToken) {
+    username = accountSid;
+    password = authToken;
+  } else {
+    throw new Error(
+      'Missing Twilio credentials. Set TWILIO_API_KEY_SID + TWILIO_API_KEY_SECRET (preferred), or TWILIO_AUTH_TOKEN.'
+    );
+  }
+
+  const messagingServiceSid = Deno.env.get('TWILIO_MESSAGING_SERVICE_SID')?.trim() || null;
+  const fromNumber = Deno.env.get('TWILIO_FROM_NUMBER')?.trim() || null;
+  if (!messagingServiceSid && !fromNumber) {
+    throw new Error('Missing Twilio sender. Set TWILIO_MESSAGING_SERVICE_SID (preferred) or TWILIO_FROM_NUMBER.');
+  }
+
+  return { accountSid, username, password, messagingServiceSid, fromNumber };
 }
 
 function getSupabaseSecrets(): { url: string; serviceRoleKey: string } {
@@ -18,7 +48,6 @@ function getSupabaseSecrets(): { url: string; serviceRoleKey: string } {
   return { url, serviceRoleKey };
 }
 
-// Naive rate limit: job_id -> timestamps
 const rateLimit = new Map<string, number[]>();
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 5;
@@ -51,13 +80,37 @@ function formatDate(val: string | null | undefined): string {
   }
 }
 
-function renderTemplate(body: string, ctx: { member_name: string; ticket_number: string; ready_date: string; pickup_deadline: string }): string {
+function formatMoney(val: number | string | null | undefined): string {
+  const n = typeof val === 'number' ? val : Number(val);
+  if (!Number.isFinite(n)) return '0.00';
+  return n.toFixed(2);
+}
+
+interface TemplateCtx {
+  member_name: string;
+  ticket_number: string;
+  ready_date: string;
+  pickup_deadline: string;
+  amount_paid: string;
+  paid_at: string;
+}
+
+function renderTemplate(body: string, ctx: TemplateCtx): string {
   return body
     .replace(/\{\{member_name\}\}/g, ctx.member_name)
     .replace(/\{\{ticket_number\}\}/g, ctx.ticket_number)
     .replace(/\{\{ready_date\}\}/g, ctx.ready_date)
-    .replace(/\{\{pickup_deadline\}\}/g, ctx.pickup_deadline);
+    .replace(/\{\{pickup_deadline\}\}/g, ctx.pickup_deadline)
+    .replace(/\{\{amount_paid\}\}/g, ctx.amount_paid)
+    .replace(/\{\{paid_at\}\}/g, ctx.paid_at);
 }
+
+const SMS_EVENT_BY_TEMPLATE: Record<string, string> = {
+  day8_reminder: 'day8_reminder_sms_sent',
+  day10_notice: 'day10_notice_sms_sent',
+  pickup_ready: 'pickup_ready_sms_sent',
+  payment_receipt: 'payment_receipt_sms_sent',
+};
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -86,10 +139,10 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!message && !VALID_TEMPLATE_KEYS.includes(templateKey)) {
-      return new Response(JSON.stringify({ error: 'Either message or template_key (day8_reminder | day10_notice) is required' }), {
-        status: 400,
-        headers: corsHeaders(),
-      });
+      return new Response(
+        JSON.stringify({ error: `Either message or template_key (${VALID_TEMPLATE_KEYS.join(' | ')}) is required` }),
+        { status: 400, headers: corsHeaders() }
+      );
     }
 
     if (!checkRateLimit(jobId)) {
@@ -102,13 +155,30 @@ Deno.serve(async (req: Request) => {
     const { url, serviceRoleKey } = getSupabaseSecrets();
     const supabase = createClient(url, serviceRoleKey);
 
-    const { data: job, error: jobError } = await supabase.from('racquet_jobs').select('id, member_name, ticket_number, ready_for_pickup_at, pickup_deadline, phone').eq('id', jobId).single();
+    const { data: job, error: jobError } = await supabase
+      .from('racquet_jobs')
+      .select(
+        'id, member_name, ticket_number, ready_for_pickup_at, pickup_deadline, phone, amount_paid, paid_at, payment_status'
+      )
+      .eq('id', jobId)
+      .single();
 
     if (jobError || !job) {
       return new Response(JSON.stringify({ error: 'Job not found' }), { status: 404, headers: corsHeaders() });
     }
 
-    const to = toPhone || (job as { phone?: string }).phone || '';
+    const j = job as {
+      id: string;
+      phone?: string | null;
+      member_name?: string | null;
+      ticket_number?: string | null;
+      ready_for_pickup_at?: string | null;
+      pickup_deadline?: string | null;
+      amount_paid?: number | null;
+      paid_at?: string | null;
+      payment_status?: string | null;
+    };
+    const to = toPhone || j.phone || '';
     if (!to) {
       return new Response(JSON.stringify({ error: 'No phone number for this job. Provide to_phone or ensure job has phone.' }), {
         status: 400,
@@ -136,34 +206,39 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: `Template not found: ${templateKey}` }), { status: 404, headers: corsHeaders() });
       }
 
-      const j = job as { member_name?: string; ticket_number?: string; ready_for_pickup_at?: string; pickup_deadline?: string };
-      finalMessage = renderTemplate(template.body, {
+      const ctx: TemplateCtx = {
         member_name: j.member_name ?? 'Customer',
         ticket_number: j.ticket_number ?? 'N/A',
         ready_date: formatDate(j.ready_for_pickup_at),
         pickup_deadline: formatDate(j.pickup_deadline),
-      });
+        amount_paid: formatMoney(j.amount_paid),
+        paid_at: formatDate(j.paid_at),
+      };
+      finalMessage = renderTemplate(template.body as string, ctx);
     }
 
-    const { accountSid, authToken, fromNumber } = getSmsSecrets();
-    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+    const auth = getTwilioAuth();
+    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${auth.accountSid}/Messages.json`;
+    const params = new URLSearchParams({ To: normalizedPhone, Body: finalMessage });
+    if (auth.messagingServiceSid) {
+      params.set('MessagingServiceSid', auth.messagingServiceSid);
+    } else if (auth.fromNumber) {
+      params.set('From', auth.fromNumber);
+    }
+
     const twilioRes = await fetch(twilioUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: 'Basic ' + btoa(`${accountSid}:${authToken}`),
+        Authorization: 'Basic ' + btoa(`${auth.username}:${auth.password}`),
       },
-      body: new URLSearchParams({
-        To: normalizedPhone,
-        From: fromNumber,
-        Body: finalMessage,
-      }),
+      body: params,
     });
 
     const twilioData = await twilioRes.json().catch(() => ({}));
     if (!twilioRes.ok) {
       const msg = twilioData.message || twilioData.error_message || twilioRes.statusText || 'Twilio error';
-      return new Response(JSON.stringify({ error: msg }), {
+      return new Response(JSON.stringify({ error: msg, code: twilioData.code }), {
         status: twilioRes.status >= 400 ? twilioRes.status : 500,
         headers: corsHeaders(),
       });
@@ -171,9 +246,10 @@ Deno.serve(async (req: Request) => {
 
     const sid = twilioData.sid || null;
 
+    const eventType = SMS_EVENT_BY_TEMPLATE[templateKey] ?? 'sms_sent';
     await supabase.from('status_events').insert({
       job_id: jobId,
-      event_type: 'sms_sent',
+      event_type: eventType,
       staff_name: staffName,
     });
 

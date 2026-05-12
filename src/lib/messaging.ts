@@ -3,6 +3,23 @@ import type { RacquetJob } from '@/types';
 import { normalizeStatusKey } from '@/types';
 
 export type ReminderTemplateKey = 'day8_reminder' | 'day10_notice';
+export type CustomerSmsTemplateKey =
+  | 'day8_reminder'
+  | 'day10_notice'
+  | 'pickup_ready'
+  | 'payment_receipt';
+
+/** True if this E.164 phone has previously been verified (anon SELECT is allowed). */
+export async function isPhoneVerified(phoneE164: string): Promise<boolean> {
+  if (!phoneE164) return false;
+  const { data, error } = await supabase
+    .from('verified_phones' as any)
+    .select('phone')
+    .eq('phone', phoneE164)
+    .maybeSingle();
+  if (error) return false;
+  return !!data;
+}
 
 const MS_DAY = 24 * 60 * 60 * 1000;
 
@@ -69,6 +86,25 @@ export async function checkPhoneVerification(
 export async function sendSmsReminder(
   jobId: string,
   templateKey: ReminderTemplateKey,
+  staffName?: string | null
+): Promise<{ ok: true; sid?: string }> {
+  const { data, error } = await supabase.functions.invoke('notify-sms', {
+    body: { job_id: jobId, template_key: templateKey, staff_name: staffName ?? null },
+  });
+
+  if (error) throw new Error(error.message || 'Failed to send SMS');
+  if (data?.error) throw new Error(data.error);
+  if (!data?.ok) throw new Error('SMS send failed');
+  return { ok: true, sid: data.sid };
+}
+
+/**
+ * Manually (re)send any customer-facing template SMS for a job.
+ * Use for the "Resend pickup ready" button in Admin / Front Desk.
+ */
+export async function sendCustomerSms(
+  jobId: string,
+  templateKey: CustomerSmsTemplateKey,
   staffName?: string | null
 ): Promise<{ ok: true; sid?: string }> {
   const { data, error } = await supabase.functions.invoke('notify-sms', {

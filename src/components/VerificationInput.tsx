@@ -16,6 +16,12 @@ interface VerificationInputProps {
   onBlur?: () => void;
   register: any;
   required?: boolean;
+  /** When provided, the "Send Code" button calls this. Receives the current input value. */
+  onSendCode?: () => Promise<void> | void;
+  /** When provided, "Confirm" calls this with the OTP. Should resolve when verification succeeds. */
+  onVerifyCode?: (code: string) => Promise<void> | void;
+  /** Hint shown under the input when verification is required. */
+  helperText?: string;
 }
 
 export function VerificationInput({
@@ -28,13 +34,37 @@ export function VerificationInput({
   onBlur,
   register,
   required = true,
+  onSendCode,
+  onVerifyCode,
+  helperText,
 }: VerificationInputProps) {
   const [codeSent, setCodeSent] = useState(false);
   const [otpValue, setOtpValue] = useState('');
+  const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
 
-  const handleSendCode = () => {
-    setCodeSent(true);
-    // UI-only: no actual code is sent
+  const handleSendCode = async () => {
+    if (sending) return;
+    setSending(true);
+    try {
+      if (onSendCode) {
+        await onSendCode();
+      }
+      setCodeSent(true);
+      setOtpValue('');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (verifying || !onVerifyCode || otpValue.length < 6) return;
+    setVerifying(true);
+    try {
+      await onVerifyCode(otpValue);
+    } finally {
+      setVerifying(false);
+    }
   };
 
   return (
@@ -62,8 +92,9 @@ export function VerificationInput({
             size="sm"
             className="shrink-0 text-xs h-10 px-3 border-primary/40 text-primary hover:bg-primary/10 hover:border-primary"
             onClick={handleSendCode}
+            disabled={sending}
           >
-            {codeSent ? 'Resend' : 'Send Code'}
+            {sending ? 'Sending…' : codeSent ? 'Resend' : 'Send Code'}
           </Button>
         )}
       </div>
@@ -72,21 +103,36 @@ export function VerificationInput({
       {required && codeSent && !verified && (
         <div className="space-y-2 pt-1">
           <p className="text-xs text-muted-foreground">Enter the 6-digit code sent to your {label.toLowerCase()}</p>
-          <InputOTP maxLength={6} value={otpValue} onChange={setOtpValue}>
-            <InputOTPGroup>
-              <InputOTPSlot index={0} />
-              <InputOTPSlot index={1} />
-              <InputOTPSlot index={2} />
-              <InputOTPSlot index={3} />
-              <InputOTPSlot index={4} />
-              <InputOTPSlot index={5} />
-            </InputOTPGroup>
-          </InputOTP>
+          <div className="flex items-center gap-2">
+            <InputOTP maxLength={6} value={otpValue} onChange={setOtpValue}>
+              <InputOTPGroup>
+                <InputOTPSlot index={0} />
+                <InputOTPSlot index={1} />
+                <InputOTPSlot index={2} />
+                <InputOTPSlot index={3} />
+                <InputOTPSlot index={4} />
+                <InputOTPSlot index={5} />
+              </InputOTPGroup>
+            </InputOTP>
+            {onVerifyCode && (
+              <Button
+                type="button"
+                size="sm"
+                className="h-10"
+                onClick={handleConfirm}
+                disabled={verifying || otpValue.length < 6}
+              >
+                {verifying ? 'Checking…' : 'Confirm'}
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
       {required && !verified && !codeSent && (
-        <p className="text-xs text-muted-foreground/70">Verification required to submit</p>
+        <p className="text-xs text-muted-foreground/70">
+          {helperText ?? 'Verification required to submit'}
+        </p>
       )}
     </div>
   );

@@ -15,7 +15,12 @@ import { PaymentStatusBadge } from '@/components/admin/PaymentStatusBadge';
 import { RecordPaymentDialog } from '@/components/admin/RecordPaymentDialog';
 import { PickupCompleteDialog } from '@/components/admin/PickupCompleteDialog';
 import { AttachmentsDialog } from '@/components/admin/AttachmentsDialog';
-import { sendSmsReminder, isDay8ReminderEligible, isDay10ReminderEligible } from '@/lib/messaging';
+import {
+  sendSmsReminder,
+  sendCustomerSms,
+  isDay8ReminderEligible,
+  isDay10ReminderEligible,
+} from '@/lib/messaging';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,7 +51,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { DollarSign, Package, Paperclip, AlertTriangle, MonitorSmartphone, MessageSquare } from 'lucide-react';
+import { DollarSign, Package, Paperclip, AlertTriangle, MonitorSmartphone, MessageSquare, MessageSquareReply } from 'lucide-react';
 
 // Front desk sees: jobs that are completed/ready_for_pickup/waiting_pickup/overdue
 // Toggle to show pickup_completed (done) jobs
@@ -71,7 +76,7 @@ export default function FrontDeskDashboard() {
   const [attachRacquet, setAttachRacquet] = useState<RacquetJob | null>(null);
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
   const [reminderJob, setReminderJob] = useState<RacquetJob | null>(null);
-  const [reminderType, setReminderType] = useState<'day8' | 'day10'>('day8');
+  const [reminderType, setReminderType] = useState<'day8' | 'day10' | 'pickup_ready'>('day8');
   const [reminderSending, setReminderSending] = useState(false);
 
   const { data: racquets = [], isLoading, error } = useQuery({
@@ -147,14 +152,19 @@ export default function FrontDeskDashboard() {
     if (!reminderJob) return;
     setReminderSending(true);
     try {
-      const templateKey = reminderType === 'day8' ? 'day8_reminder' : 'day10_notice';
-      await sendSmsReminder(reminderJob.id, templateKey);
+      if (reminderType === 'pickup_ready') {
+        await sendCustomerSms(reminderJob.id, 'pickup_ready');
+        toast.success('Pickup-ready SMS sent');
+      } else {
+        const templateKey = reminderType === 'day8' ? 'day8_reminder' : 'day10_notice';
+        await sendSmsReminder(reminderJob.id, templateKey);
+        toast.success(reminderType === 'day8' ? 'Day 8 reminder sent (SMS)' : 'Day 10 notice sent (SMS)');
+      }
       queryClient.invalidateQueries({ queryKey: ['racquets'] });
-      toast.success(reminderType === 'day8' ? 'Day 8 reminder sent (SMS)' : 'Day 10 notice sent (SMS)');
       setReminderDialogOpen(false);
       setReminderJob(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to send reminder');
+      toast.error(err instanceof Error ? err.message : 'Failed to send SMS');
     } finally {
       setReminderSending(false);
     }
@@ -325,6 +335,17 @@ export default function FrontDeskDashboard() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
+                            {normalized === 'ready_for_pickup' && job.phone && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Resend pickup-ready SMS"
+                                onClick={() => { setReminderJob(job); setReminderType('pickup_ready'); setReminderDialogOpen(true); }}
+                                className="opacity-60 group-hover:opacity-100 text-primary"
+                              >
+                                <MessageSquareReply className="w-4 h-4" />
+                              </Button>
+                            )}
                             {day8Eligible && (
                               <Button
                                 variant="ghost"
@@ -406,13 +427,21 @@ export default function FrontDeskDashboard() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                {reminderType === 'day8' ? 'Send Day 8 Reminder' : 'Send Day 10 Notice'}
+                {reminderType === 'pickup_ready'
+                  ? 'Resend Pickup-Ready SMS'
+                  : reminderType === 'day8'
+                  ? 'Send Day 8 Reminder'
+                  : 'Send Day 10 Notice'}
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {reminderJob && (
                   <>
-                    Send {reminderType === 'day8' ? 'Day 8 reminder' : 'Day 10 overdue notice'} (SMS) to{' '}
-                    <strong>{reminderJob.member_name}</strong>?
+                    {reminderType === 'pickup_ready'
+                      ? 'Resend pickup-ready SMS'
+                      : reminderType === 'day8'
+                      ? 'Send Day 8 reminder (SMS)'
+                      : 'Send Day 10 overdue notice (SMS)'}{' '}
+                    to <strong>{reminderJob.member_name}</strong>?
                     {reminderJob.phone ? (
                       <span className="block mt-1 text-muted-foreground text-sm">To: {reminderJob.phone}</span>
                     ) : null}

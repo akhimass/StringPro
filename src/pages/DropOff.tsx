@@ -6,6 +6,11 @@ import { z } from 'zod';
 import { useMemo, useEffect } from 'react';
 import { normalizeUSPhone, isValidEmail } from '@/lib/validation';
 import {
+  isPhoneVerified,
+  startPhoneVerification,
+  checkPhoneVerification,
+} from '@/lib/messaging';
+import {
   fetchStrings,
   fetchBrands,
   fetchFrontDeskStaff,
@@ -107,8 +112,8 @@ export default function DropOff() {
     gripAddOn: false,
   });
 
-  // UI-only verification state (no real verification logic)
-  const [phoneVerified] = useState(false);
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [verifiedPhoneE164, setVerifiedPhoneE164] = useState<string | null>(null);
   const [emailVerified] = useState(false);
 
   const {
@@ -240,6 +245,76 @@ export default function DropOff() {
 
   const watchedStringId = watch('stringId');
   const watchedBrand = watch('racquetBrand');
+  const watchedPhone = watch('customerPhone');
+
+  useEffect(() => {
+    const e164 = normalizeUSPhone(watchedPhone || '');
+    if (!e164) {
+      if (phoneVerified) {
+        setPhoneVerified(false);
+        setVerifiedPhoneE164(null);
+      }
+      return;
+    }
+    if (verifiedPhoneE164 && verifiedPhoneE164 !== e164) {
+      setPhoneVerified(false);
+      setVerifiedPhoneE164(null);
+    }
+  }, [watchedPhone, phoneVerified, verifiedPhoneE164]);
+
+  const handlePhoneBlur = async () => {
+    await trigger('customerPhone');
+    const e164 = normalizeUSPhone(watch('customerPhone') || '');
+    if (!e164) return;
+    try {
+      const already = await isPhoneVerified(e164);
+      if (already) {
+        setPhoneVerified(true);
+        setVerifiedPhoneE164(e164);
+      }
+    } catch {
+      // non-fatal: user can still go through the OTP path
+    }
+  };
+
+  const handleSendPhoneCode = async () => {
+    const e164 = normalizeUSPhone(watch('customerPhone') || '');
+    if (!e164) {
+      toast.error('Enter a valid US phone number first.');
+      throw new Error('Invalid phone');
+    }
+    try {
+      await startPhoneVerification(e164, 'sms');
+      toast.success(`Code sent to ${e164}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not send verification code.';
+      toast.error(message);
+      throw err;
+    }
+  };
+
+  const handleVerifyPhoneCode = async (code: string) => {
+    const e164 = normalizeUSPhone(watch('customerPhone') || '');
+    if (!e164) {
+      toast.error('Enter a valid US phone number first.');
+      throw new Error('Invalid phone');
+    }
+    try {
+      const res = await checkPhoneVerification(e164, code);
+      if (!res.ok) {
+        toast.error('That code is incorrect or expired. Try again or resend.');
+        throw new Error('Invalid code');
+      }
+      setPhoneVerified(true);
+      setVerifiedPhoneE164(e164);
+      toast.success('Phone verified');
+    } catch (err) {
+      if (err instanceof Error && err.message === 'Invalid code') throw err;
+      const message = err instanceof Error ? err.message : 'Verification failed.';
+      toast.error(message);
+      throw err;
+    }
+  };
   const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const activeStrings = useMemo(() => (Array.isArray(strings) ? strings : []).filter((s) => s.active), [strings]);
@@ -386,8 +461,7 @@ export default function DropOff() {
       ? Number(selectedString.price)
       : 0;
 
-  // Check if form can be submitted (UI-only disabled state)
-  const canSubmit = true; // In production: phoneVerified && emailVerified
+  const canSubmit = phoneVerified;
 
   if (submitted) {
     return (
@@ -518,7 +592,6 @@ export default function DropOff() {
                   </div>
                 </div>
 
-                {/* Phone with verification */}
                 <VerificationInput
                   id="customerPhone"
                   label="Phone"
@@ -526,11 +599,13 @@ export default function DropOff() {
                   value={watch('customerPhone')}
                   error={errors.customerPhone?.message}
                   verified={phoneVerified}
-                  onBlur={() => trigger('customerPhone')}
+                  onBlur={handlePhoneBlur}
                   register={register('customerPhone')}
+                  onSendCode={handleSendPhoneCode}
+                  onVerifyCode={handleVerifyPhoneCode}
+                  helperText="We'll text you a 6-digit code to confirm this number. Required to submit."
                 />
 
-                {/* Email (optional) */}
                 <VerificationInput
                   id="customerEmail"
                   label="Email (optional)"
@@ -543,6 +618,14 @@ export default function DropOff() {
                   register={register('customerEmail')}
                   required={false}
                 />
+
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  By providing your phone number, you agree to receive SMS updates from CAN-AM Elite
+                  Badminton Club about your racquet (pickup ready, reminders, payment receipts) and a
+                  one-time verification code. Msg &amp; data rates may apply. Reply{' '}
+                  <span className="font-medium">STOP</span> to opt out, <span className="font-medium">HELP</span>{' '}
+                  for help.
+                </p>
               </div>
 
               {/* Racquet Details */}
@@ -778,7 +861,7 @@ export default function DropOff() {
                 </TooltipTrigger>
                 {!canSubmit && (
                   <TooltipContent>
-                    <p>Verify email and phone to continue</p>
+                    <p>Verify your phone number to continue</p>
                   </TooltipContent>
                 )}
               </Tooltip>
