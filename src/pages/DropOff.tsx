@@ -404,6 +404,14 @@ export default function DropOff() {
     const pickupDeadline = toLocalDateString(dropDateObj);
 
     const normalizedPhone = normalizeUSPhone(data.customerPhone) as string;
+
+    if (!phoneVerified || verifiedPhoneE164 !== normalizedPhone) {
+      toast.error('Please verify your phone number before submitting.');
+      try {
+        setFocus('customerPhone');
+      } catch (_) {}
+      return;
+    }
     const normalizedEmail = data.customerEmail?.trim()
       ? data.customerEmail.trim().toLowerCase()
       : '';
