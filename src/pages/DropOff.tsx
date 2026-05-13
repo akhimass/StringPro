@@ -40,11 +40,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { computeAmountDue } from '@/lib/pricing';
 import { Link } from 'react-router-dom';
@@ -404,14 +399,6 @@ export default function DropOff() {
     const pickupDeadline = toLocalDateString(dropDateObj);
 
     const normalizedPhone = normalizeUSPhone(data.customerPhone) as string;
-
-    if (!phoneVerified || verifiedPhoneE164 !== normalizedPhone) {
-      toast.error('Please verify your phone number before submitting.');
-      try {
-        setFocus('customerPhone');
-      } catch (_) {}
-      return;
-    }
     const normalizedEmail = data.customerEmail?.trim()
       ? data.customerEmail.trim().toLowerCase()
       : '';
@@ -469,7 +456,7 @@ export default function DropOff() {
       ? Number(selectedString.price)
       : 0;
 
-  const canSubmit = phoneVerified;
+  const canSubmit = true;
 
   if (submitted) {
     return (
@@ -611,7 +598,7 @@ export default function DropOff() {
                   register={register('customerPhone')}
                   onSendCode={handleSendPhoneCode}
                   onVerifyCode={handleVerifyPhoneCode}
-                  helperText="We'll text you a 6-digit code to confirm this number. Required to submit."
+                  helperText="Optional: tap Send Code to confirm your number for faster future drop-offs."
                 />
 
                 <VerificationInput
@@ -853,26 +840,14 @@ export default function DropOff() {
                 />
               )}
 
-              {/* Submit */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <Button
-                      type="submit"
-                      className="w-full"
-                      size="lg"
-                      disabled={mutation.isPending || !canSubmit}
-                    >
-                      {mutation.isPending ? 'Submitting...' : 'Submit Racquet'}
-                    </Button>
-                  </div>
-                </TooltipTrigger>
-                {!canSubmit && (
-                  <TooltipContent>
-                    <p>Verify your phone number to continue</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
+              <Button
+                type="submit"
+                className="w-full"
+                size="lg"
+                disabled={mutation.isPending}
+              >
+                {mutation.isPending ? 'Submitting...' : 'Submit Racquet'}
+              </Button>
             </form>
           )}
         </div>
